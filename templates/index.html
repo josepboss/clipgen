@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClipGen — YouTube Shorts Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #18181b;
+      --surface2: #232328;
+      --border: #2e2e35;
+      --accent: #7c3aed;
+      --accent-hover: #6d28d9;
+      --accent-glow: rgba(124,58,237,0.25);
+      --text: #f4f4f5;
+      --muted: #71717a;
+      --success: #22c55e;
+      --error: #ef4444;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #a78bfa, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .input-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-row input:focus { border-color: var(--accent); }
+    .input-row input::placeholder { color: var(--muted); }
+
+    .input-row button {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 12px 22px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .input-row button:hover:not(:disabled) {
+      background: var(--accent-hover);
+      box-shadow: 0 0 18px var(--accent-glow);
+    }
+    .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .options-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .options-row label { display: flex; align-items: center; gap: 6px; }
+    .options-row select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    /* Progress section */
+    #progress-section { display: none; margin-top: 28px; }
+
+    .progress-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-header span { font-weight: 600; font-size: 0.95rem; }
+
+    .progress-bar-wrap {
+      background: var(--surface2);
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 99px;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+
+    .steps-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.875rem;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+    .step-item.active { color: var(--text); }
+    .step-item.done { color: var(--success); }
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .step-item.active .step-dot { background: var(--accent); }
+    .step-item.done .step-dot { background: var(--success); }
+
+    .step-detail {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-left: 18px;
+      margin-top: 2px;
+    }
+
+    /* Error */
+    .error-box {
+      display: none;
+      margin-top: 20px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 14px 16px;
+      color: var(--error);
+      font-size: 0.875rem;
+    }
+
+    /* Results */
+    #results-section { display: none; margin-top: 36px; }
+    #results-section h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    .clips-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .clip-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .clip-card video {
+      width: 100%;
+      max-height: 420px;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+    .clip-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      gap: 10px;
+    }
+    .clip-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      font-family: monospace;
+    }
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 7px;
+      padding: 7px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-download:hover { background: var(--accent-hover); }
+
+    .btn-reset {
+      display: block;
+      margin: 24px auto 0;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 9px 20px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-reset:hover { border-color: var(--accent); color: var(--text); }
+
+    footer {
+      margin-top: 48px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ClipGen</h1>
+  <p>Paste a YouTube URL — get vertical short clips, automatically.</p>
+</header>
+
+<div class="card">
+  <div class="input-row">
+    <input id="url-input" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+    <button id="submit-btn" onclick="startJob()">Generate Clips</button>
+  </div>
+  <div class="options-row">
+    <label>
+      Max clips:
+      <select id="top-select">
+        <option value="3">3</option>
+        <option value="5" selected>5</option>
+        <option value="7">7</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div class="progress-header">
+      <div class="spinner" id="spinner"></div>
+      <span id="current-step-label">Starting…</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar"></div>
+    </div>
+    <ul class="steps-list" id="steps-list">
+      <li class="step-item" data-step="downloading">
+        <div class="step-dot"></div><span>Download video</span>
+      </li>
+      <li class="step-item" data-step="transcript">
+        <div class="step-dot"></div><span>Extract transcript</span>
+      </li>
+      <li class="step-item" data-step="segmenting">
+        <div class="step-dot"></div><span>Build segments</span>
+      </li>
+      <li class="step-item" data-step="scoring">
+        <div class="step-dot"></div><span>AI scoring</span>
+      </li>
+      <li class="step-item" data-step="processing">
+        <div class="step-dot"></div><span>Process clips</span>
+      </li>
+    </ul>
+    <div id="step-detail" class="step-detail"></div>
+    <div id="error-box" class="error-box"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section">
+    <h2 id="results-title">Ready — your clips:</h2>
+    <div class="clips-grid" id="clips-grid"></div>
+    <button class="btn-reset" onclick="reset()">Generate another</button>
+  </div>
+</div>
+
+<footer>ClipGen runs locally — your API key stays private.</footer>
+
+<script>
+  const STEP_ORDER = ['downloading','transcript','segmenting','scoring','processing','done'];
+  let pollTimer = null;
+  let currentJobId = null;
+
+  function setStepStates(currentStep) {
+    const items = document.querySelectorAll('#steps-list .step-item');
+    items.forEach(el => {
+      const step = el.dataset.step;
+      const stepIdx = STEP_ORDER.indexOf(step);
+      const curIdx = STEP_ORDER.indexOf(currentStep);
+      el.classList.remove('active','done');
+      if (step === currentStep) el.classList.add('active');
+      else if (stepIdx < curIdx) el.classList.add('done');
+    });
+  }
+
+  async function startJob() {
+    const url = document.getElementById('url-input').value.trim();
+    const top = document.getElementById('top-select').value;
+    const errorBox = document.getElementById('error-box');
+
+    if (!url) { showError('Please enter a YouTube URL.'); return; }
+
+    errorBox.style.display = 'none';
+    document.getElementById('submit-btn').disabled = true;
+    document.getElementById('url-input').disabled = true;
+    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('progress-section').style.display = 'block';
+    document.getElementById('spinner').style.display = '';
+    setStepStates('queued');
+    setProgress(0, 'Starting…', '');
+
+    try {
+      const res = await fetch('/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, top: parseInt(top) }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Failed to start job.'); return; }
+      currentJobId = data.job_id;
+      pollTimer = setInterval(poll, 1800);
+    } catch (e) {
+      showError('Network error — is the server running?');
+    }
+  }
+
+  async function poll() {
+    if (!currentJobId) return;
+    try {
+      const res = await fetch(`/status/${currentJobId}`);
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Status check failed.'); clearInterval(pollTimer); return; }
+
+      setProgress(data.progress, data.step_label, data.detail);
+      setStepStates(data.step);
+
+      if (data.error) {
+        clearInterval(pollTimer);
+        showError(data.error);
+        document.getElementById('spinner').style.display = 'none';
+        return;
+      }
+
+      if (data.done) {
+        clearInterval(pollTimer);
+        document.getElementById('spinner').style.display = 'none';
+        showResults(data.clips);
+      }
+    } catch (e) {
+      /* transient network error — keep polling */
+    }
+  }
+
+  function setProgress(pct, label, detail) {
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('current-step-label').textContent = label;
+    document.getElementById('step-detail').textContent = detail;
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('error-box');
+    box.textContent = msg;
+    box.style.display = 'block';
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('url-input').disabled = false;
+  }
+
+  function showResults(clips) {
+    setProgress(100, 'Done!', `${clips.length} clip(s) generated`);
+    const grid = document.getElementById('clips-grid');
+    grid.innerHTML = '';
+    clips.forEach(name => {
+      const card = document.createElement('div');
+      card.className = 'clip-card';
+      card.innerHTML = `
+        <video controls playsinline preload="metadata">
+          <source src="/output/${encodeURIComponent(name)}" type="video/mp4" />
+        </video>
+        <div class="clip-footer">
+          <span class="clip-name">${name}</span>
+          <a class="btn-download" href="/download/${encodeURIComponent(name)}" download="${name}">
+            &#8595; Download
+          </a>
+        </div>`;
+      grid.appendChild(card);
+    });
+    document.getElementById('results-title').textContent =
+      `${clips.length} clip${clips.length !== 1 ? 's' : ''} ready:`;
+    document.getElementById('results-section').style.display = 'block';
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('url-input').disabled = false;
+  }
+
+  function reset() {
+    clearInterval(pollTimer);
+    currentJobId = null;
+    document.getElementById('url-input').value = '';
+    document.getElementById('url-input').disabled = false;
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('progress-section').style.display = 'none';
+    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('error-box').style.display = 'none';
+    document.getElementById('progress-bar').style.width = '0%';
+    document.querySelectorAll('#steps-list .step-item').forEach(el => el.classList.remove('active','done'));
+    document.getElementById('url-input').focus();
+  }
+
+  document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') startJob();
+  });
+</script>
+</body>
+</html>

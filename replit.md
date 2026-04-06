@@ -30,6 +30,13 @@ Generates vertical (9:16, 1080×1920) short clips from a YouTube URL using AI se
 
 ### Usage
 
+**Web UI (recommended):**
+```bash
+python main.py
+# → open http://localhost:5000
+```
+
+**CLI:**
 ```bash
 python main.py "<youtube_url>"
 python main.py "<youtube_url>" --top 3 --output my_clips

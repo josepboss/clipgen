@@ -1,193 +1,356 @@
 import os
 import subprocess
+import tempfile
+from collections import deque
 import cv2
 import numpy as np
 from utils import logger
 
 FACE_CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 TARGET_W, TARGET_H = 1080, 1920
-TARGET_RATIO = TARGET_W / TARGET_H
-SMOOTH_ALPHA = 0.15
+TARGET_RATIO = TARGET_W / TARGET_H   # 9:16 ≈ 0.5625
+MIN_OUTPUT_BYTES = 10_000
 
+# ── Tracking tuning constants ──────────────────────────────────────────────────
+SAMPLE_STEP = 5       # detect face every N frames  (~6 detections/s at 30 fps)
+N_SMOOTH = 8          # moving-average window length
+N_MISS_FALLBACK = 25  # hold last position for this many consecutive misses
+#                       then drift gradually to center
+SNAP_LIMIT = 80       # max crop-x change allowed per 0.5 s keyframe (pixels)
+CMD_STEP_SEC = 0.5    # interval between sendcmd keyframes
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def cut_clip(source: str, start: float, end: float, temp_path: str) -> str:
-    """Precisely cut a clip using stream-copy to avoid drift."""
-    duration = end - start
+    """Precisely cut a clip from source using fast input-seek + stream-copy."""
+    duration = max(0.5, end - start)
     cmd = [
         "ffmpeg", "-y",
-        "-ss", str(start),
+        "-ss", f"{start:.3f}",
         "-i", source,
-        "-t", str(duration),
+        "-t", f"{duration:.3f}",
         "-c", "copy",
         "-avoid_negative_ts", "make_zero",
+        "-map_metadata", "-1",
         temp_path,
     ]
-    _run_command(cmd, f"cut {start:.1f}s-{end:.1f}s")
+    _run(cmd, f"cut {start:.1f}s-{end:.1f}s")
+    _validate_output(temp_path, "cut_clip")
     return temp_path
 
 
 def process_to_vertical(source_clip: str, output_path: str) -> str:
-    """Detect faces, build smooth per-frame crop trajectory, encode to 1080x1920."""
-    logger.info(f"Processing to vertical: {os.path.basename(source_clip)} -> {os.path.basename(output_path)}")
+    """Face-track and crop to 1080×1920, normalize audio, encode H.264/AAC.
+
+    Tracking pipeline:
+      1. Dense Haar detection every SAMPLE_STEP frames.
+      2. Moving-average of last N_SMOOTH detections → smooth raw positions.
+      3. Stability fallback: hold last known position for up to N_MISS_FALLBACK
+         consecutive missed frames, then drift gradually to center.
+      4. Anti-snap limiter: cap position jump to SNAP_LIMIT px per keyframe.
+      5. FFmpeg sendcmd: dynamic crop x updated every CMD_STEP_SEC seconds.
+    """
+    logger.info(
+        f"Vertical encode: {os.path.basename(source_clip)} → {os.path.basename(output_path)}"
+    )
 
     cap = cv2.VideoCapture(source_clip)
     if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video: {source_clip}")
+        raise RuntimeError(f"Cannot open video for processing: {source_clip}")
 
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    logger.info(f"Source: {orig_w}x{orig_h} @ {fps:.2f}fps, {total_frames} frames")
+    if orig_w == 0 or orig_h == 0:
+        cap.release()
+        raise RuntimeError(f"Source clip has invalid dimensions (0×0): {source_clip}")
 
-    crop_w = min(orig_w, int(orig_h * TARGET_RATIO))
-    crop_h = min(orig_h, int(orig_w / TARGET_RATIO))
+    logger.info(f"Source: {orig_w}×{orig_h} @ {fps:.2f}fps, {total_frames} frames")
+
+    crop_w, crop_h = _compute_crop_dims(orig_w, orig_h)
+    crop_y = _clamp((orig_h - crop_h) // 2, 0, max(0, orig_h - crop_h))
 
     face_cascade = cv2.CascadeClassifier(FACE_CASCADE_PATH)
+    if face_cascade.empty():
+        logger.warning("Face cascade failed to load – center crop will be used")
 
-    raw_cx_by_frame = _detect_face_positions(cap, total_frames, face_cascade, orig_w, crop_w)
+    # Build smoothed per-timestamp crop positions via dense detection
+    positions = _track_with_moving_average(
+        cap, total_frames, fps, face_cascade, orig_w, crop_w
+    )
     cap.release()
 
-    smoothed_cx = _smooth_positions(raw_cx_by_frame, total_frames, orig_w, crop_w)
+    # Build FFmpeg filter string (sendcmd + crop + scale)
+    vf, cmd_file = _build_dynamic_crop_vf(positions, crop_w, crop_h, crop_y)
 
-    face_detected = any(v is not None for v in raw_cx_by_frame.values())
-    if face_detected:
-        logger.info(f"Face tracking active across {len(raw_cx_by_frame)} sampled frames")
-    else:
-        logger.info("No faces detected — using center crop throughout")
+    try:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", source_clip,
+            "-vf", vf,
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-profile:v", "high",
+            "-level", "4.1",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-movflags", "+faststart",
+            "-pix_fmt", "yuv420p",
+            output_path,
+        ]
+        _run(cmd, f"encode → {os.path.basename(output_path)}")
+    finally:
+        if cmd_file and os.path.exists(cmd_file):
+            try:
+                os.remove(cmd_file)
+            except OSError:
+                pass
 
-    crop_y = _clamp((orig_h - crop_h) // 2, 0, orig_h - crop_h)
-
-    vf = _build_vf_with_tracking(smoothed_cx, crop_w, crop_h, crop_y, orig_w, fps, total_frames)
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", source_clip,
-        "-vf", vf,
-        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        output_path,
-    ]
-    _run_command(cmd, f"encode vertical -> {os.path.basename(output_path)}")
+    _validate_output(output_path, "process_to_vertical")
     logger.info(f"Saved: {output_path}")
     return output_path
 
 
-def _detect_face_positions(
+# ── Crop geometry ─────────────────────────────────────────────────────────────
+
+def _compute_crop_dims(orig_w: int, orig_h: int) -> tuple[int, int]:
+    """Return (crop_w, crop_h) for the largest 9:16 region fitting in orig_w×orig_h."""
+    w_from_h = int(orig_h * TARGET_RATIO)
+    if w_from_h <= orig_w:
+        return w_from_h, orig_h
+    h_from_w = int(orig_w / TARGET_RATIO)
+    return orig_w, min(h_from_w, orig_h)
+
+
+# ── Dense tracking with moving average ───────────────────────────────────────
+
+def _track_with_moving_average(
     cap: cv2.VideoCapture,
     total_frames: int,
+    fps: float,
     face_cascade: cv2.CascadeClassifier,
     orig_w: int,
     crop_w: int,
-    sample_n: int = 40,
-) -> dict[int, int | None]:
-    """Sample N frames and detect face center X. Returns {frame_index: cx or None}."""
-    results: dict[int, int | None] = {}
-    if total_frames <= 0:
-        return results
+) -> dict[float, int]:
+    """Detect faces densely and return {timestamp_sec: crop_left_x}.
 
-    step = max(1, total_frames // sample_n)
-    indices = list(range(0, total_frames, step))[:sample_n]
+    Smoothing strategy:
+      - Raw detections enter a moving-average deque (size N_SMOOTH).
+      - On a miss: hold last smoothed position for up to N_MISS_FALLBACK frames.
+      - After N_MISS_FALLBACK consecutive misses: linearly drift to center.
+    """
+    center_cx = orig_w // 2
+    max_x = max(0, orig_w - crop_w)
+    center_crop_x = _clamp(center_cx - crop_w // 2, 0, max_x)
 
-    for idx in indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+    if total_frames <= 0 or fps <= 0:
+        return {0.0: center_crop_x}
+
+    ma_buf: deque[int] = deque(maxlen=N_SMOOTH)
+    last_known_cx: int = center_cx
+    consec_miss: int = 0
+    n_detected: int = 0
+    n_sampled: int = 0
+    positions: dict[float, int] = {}
+
+    for frame_idx in range(0, total_frames, SAMPLE_STEP):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
         if not ret:
-            results[idx] = None
             continue
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(
-            gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
-        )
-        if len(faces) > 0:
-            largest = max(faces, key=lambda f: f[2] * f[3])
-            fx, fy, fw, fh = largest
-            cx = _clamp(fx + fw // 2, crop_w // 2, orig_w - crop_w // 2)
-            results[idx] = cx
+        timestamp = frame_idx / fps
+        n_sampled += 1
+        detected_cx: int | None = None
+
+        if not face_cascade.empty():
+            try:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.1,
+                    minNeighbors=3,   # slightly more lenient than default 4
+                    minSize=(25, 25),
+                )
+                if len(faces) > 0:
+                    largest = max(faces, key=lambda f: f[2] * f[3])
+                    fx, fy, fw, fh = largest
+                    # Clamp raw center so the crop window stays inside frame
+                    raw_cx = _clamp(
+                        fx + fw // 2,
+                        crop_w // 2,
+                        orig_w - crop_w // 2,
+                    )
+                    detected_cx = raw_cx
+            except Exception as e:
+                logger.debug(f"Face detection error at frame {frame_idx}: {e}")
+
+        if detected_cx is not None:
+            ma_buf.append(detected_cx)
+            smoothed_cx = int(sum(ma_buf) / len(ma_buf))
+            last_known_cx = smoothed_cx
+            consec_miss = 0
+            n_detected += 1
         else:
-            results[idx] = None
+            consec_miss += 1
+            if consec_miss <= N_MISS_FALLBACK:
+                # Hold: keep last known position without modification
+                smoothed_cx = last_known_cx
+            else:
+                # Drift: gradually move toward center to avoid being locked on
+                # a stale off-center position indefinitely
+                progress = min(1.0, (consec_miss - N_MISS_FALLBACK) / N_MISS_FALLBACK)
+                smoothed_cx = int(last_known_cx * (1.0 - progress) + center_cx * progress)
+                last_known_cx = smoothed_cx  # update so drift is continuous
 
-    return results
+        crop_x = _clamp(smoothed_cx - crop_w // 2, 0, max_x)
+        positions[timestamp] = crop_x
 
+    if n_sampled == 0:
+        return {0.0: center_crop_x}
 
-def _smooth_positions(
-    raw: dict[int, int | None],
-    total_frames: int,
-    orig_w: int,
-    crop_w: int,
-) -> list[int]:
-    """Interpolate and exponentially smooth face center X across all frames."""
-    default_cx = orig_w // 2
-
-    sampled_indices = sorted(raw.keys())
-    known: list[tuple[int, int]] = [
-        (idx, val) for idx, val in raw.items() if val is not None
-    ]
-
-    if not known:
-        return [_clamp(default_cx - crop_w // 2, 0, orig_w - crop_w)] * total_frames
-
-    interp_cx = [default_cx] * total_frames
-
-    if len(known) == 1:
-        for i in range(total_frames):
-            interp_cx[i] = known[0][1]
-    else:
-        for i in range(len(known) - 1):
-            start_idx, start_val = known[i]
-            end_idx, end_val = known[i + 1]
-            for f in range(start_idx, end_idx + 1):
-                t = (f - start_idx) / max(1, end_idx - start_idx)
-                interp_cx[f] = int(start_val + t * (end_val - start_val))
-        for f in range(0, known[0][0]):
-            interp_cx[f] = known[0][1]
-        for f in range(known[-1][0], total_frames):
-            interp_cx[f] = known[-1][1]
-
-    smoothed = [0] * total_frames
-    smoothed[0] = interp_cx[0]
-    for i in range(1, total_frames):
-        smoothed[i] = int(SMOOTH_ALPHA * interp_cx[i] + (1 - SMOOTH_ALPHA) * smoothed[i - 1])
-
-    crop_x_list = [_clamp(cx - crop_w // 2, 0, orig_w - crop_w) for cx in smoothed]
-    return crop_x_list
+    pct = 100 * n_detected // n_sampled if n_sampled else 0
+    logger.info(
+        f"Face tracking: detected in {n_detected}/{n_sampled} samples ({pct}%)"
+    )
+    return positions
 
 
-def _build_vf_with_tracking(
-    crop_x_per_frame: list[int],
+# ── Dynamic crop filter string ────────────────────────────────────────────────
+
+def _build_dynamic_crop_vf(
+    positions: dict[float, int],
     crop_w: int,
     crop_h: int,
     crop_y: int,
-    orig_w: int,
-    fps: float,
-    total_frames: int,
-) -> str:
-    """Build FFmpeg video filter string using median smoothed crop X position."""
-    if not crop_x_per_frame:
-        cx = max(0, (orig_w - crop_w) // 2)
-    else:
-        cx = int(np.median(crop_x_per_frame))
+) -> tuple[str, str | None]:
+    """Build an FFmpeg filtergraph string that moves the crop window dynamically.
 
-    logger.info(f"Final crop X: {cx}  (median of {len(crop_x_per_frame)} smoothed frames)")
-    return (
-        f"crop={crop_w}:{crop_h}:{cx}:{crop_y},"
-        f"scale={TARGET_W}:{TARGET_H}:flags=lanczos"
+    Uses FFmpeg's `sendcmd` filter to update crop x at CMD_STEP_SEC intervals.
+    Returns (vf_string, temp_sendcmd_file_or_None).
+    Caller is responsible for deleting the temp file.
+
+    If the sendcmd file cannot be written, falls back to a static median crop.
+    """
+    if not positions:
+        vf = (
+            f"crop={crop_w}:{crop_h}:0:{crop_y},"
+            f"scale={TARGET_W}:{TARGET_H}:flags=lanczos"
+        )
+        return vf, None
+
+    sorted_ts = sorted(positions.keys())
+    total_dur = sorted_ts[-1]
+
+    # Build keypoints at CMD_STEP_SEC intervals
+    raw_keypoints: list[tuple[float, int]] = []
+    t = 0.0
+    while t <= total_dur + CMD_STEP_SEC:
+        x = _interp(positions, sorted_ts, t)
+        raw_keypoints.append((t, x))
+        t += CMD_STEP_SEC
+
+    # Anti-snap: limit how far the crop can jump per keyframe
+    smooth_kp: list[tuple[float, int]] = [raw_keypoints[0]]
+    for ts, x in raw_keypoints[1:]:
+        prev_x = smooth_kp[-1][1]
+        delta = x - prev_x
+        if abs(delta) > SNAP_LIMIT:
+            x = prev_x + int(SNAP_LIMIT * (1 if delta > 0 else -1))
+        smooth_kp.append((ts, x))
+
+    initial_x = smooth_kp[0][1]
+    xs = [x for _, x in smooth_kp]
+    logger.info(
+        f"Dynamic crop: {len(smooth_kp)} keyframes over {total_dur:.1f}s, "
+        f"x ∈ [{min(xs)}, {max(xs)}]  (crop_w={crop_w}, crop_y={crop_y})"
     )
 
+    # Write sendcmd temp file
+    cmd_file: str | None = None
+    try:
+        fd, cmd_file = tempfile.mkstemp(suffix=".txt", prefix="clipgen_crop_")
+        with os.fdopen(fd, "w") as f:
+            # FFmpeg sendcmd format: each entry terminated by ';'
+            f.write(
+                ";".join(f"{ts:.3f} crop x {x}" for ts, x in smooth_kp) + ";"
+            )
+    except Exception as e:
+        logger.warning(f"Could not write sendcmd file – falling back to static crop: {e}")
+        if cmd_file and os.path.exists(cmd_file):
+            try:
+                os.remove(cmd_file)
+            except OSError:
+                pass
+        cmd_file = None
+
+    if cmd_file:
+        vf = (
+            f"sendcmd=f={cmd_file},"
+            f"crop={crop_w}:{crop_h}:{initial_x}:{crop_y},"
+            f"scale={TARGET_W}:{TARGET_H}:flags=lanczos"
+        )
+    else:
+        # Static fallback: median crop-x
+        median_x = int(np.median(xs))
+        logger.info(f"Static fallback: crop x={median_x}")
+        vf = (
+            f"crop={crop_w}:{crop_h}:{median_x}:{crop_y},"
+            f"scale={TARGET_W}:{TARGET_H}:flags=lanczos"
+        )
+
+    return vf, cmd_file
+
+
+def _interp(positions: dict[float, int], sorted_ts: list[float], t: float) -> int:
+    """Linear interpolation of crop-x at time t from sorted sample points."""
+    if not sorted_ts:
+        return 0
+    if t <= sorted_ts[0]:
+        return positions[sorted_ts[0]]
+    if t >= sorted_ts[-1]:
+        return positions[sorted_ts[-1]]
+
+    # Binary search for the bracketing timestamps
+    lo, hi = 0, len(sorted_ts) - 1
+    while lo < hi - 1:
+        mid = (lo + hi) // 2
+        if sorted_ts[mid] <= t:
+            lo = mid
+        else:
+            hi = mid
+
+    t0, t1 = sorted_ts[lo], sorted_ts[hi]
+    x0, x1 = positions[t0], positions[t1]
+    frac = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
+    return int(x0 + frac * (x1 - x0))
+
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
 
 def _clamp(val: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, val))
 
 
-def _run_command(cmd: list[str], label: str) -> None:
-    logger.info(f"[{label}] cmd: {' '.join(cmd)}")
+def _validate_output(path: str, label: str) -> None:
+    if not os.path.exists(path):
+        raise RuntimeError(f"[{label}] Output file was not created: {path}")
+    size = os.path.getsize(path)
+    if size < MIN_OUTPUT_BYTES:
+        raise RuntimeError(
+            f"[{label}] Output file too small ({size} bytes) – likely corrupt: {path}"
+        )
+    logger.info(f"[{label}] OK: {os.path.basename(path)} ({size/1024:.1f} KB)")
+
+
+def _run(cmd: list[str], label: str) -> None:
+    logger.info(f"[ffmpeg:{label}] " + " ".join(cmd))
     result = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -195,6 +358,12 @@ def _run_command(cmd: list[str], label: str) -> None:
         text=True,
     )
     if result.returncode != 0:
-        logger.error(f"[{label}] FAILED:\n{result.stderr[-2000:]}")
-        raise RuntimeError(f"FFmpeg command failed [{label}]: exit {result.returncode}")
-    logger.debug(f"[{label}] done")
+        logger.error(
+            f"[ffmpeg:{label}] FAILED (exit {result.returncode}):\n"
+            f"{result.stderr[-3000:] if result.stderr else '(no stderr)'}"
+        )
+        raise RuntimeError(
+            f"FFmpeg [{label}] exited {result.returncode}. "
+            f"Last error: {result.stderr[-200:].strip()}"
+        )
+    logger.debug(f"[ffmpeg:{label}] done")

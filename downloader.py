@@ -10,9 +10,13 @@ def download_video(url: str, output_dir: str = "downloads") -> str:
     os.makedirs(output_dir, exist_ok=True)
     dest = os.path.join(output_dir, "input.mp4")
 
-    if os.path.exists(dest):
-        logger.info(f"Video already downloaded: {dest}")
+    # Only use cached file if it's a valid, non-empty MP4
+    if os.path.exists(dest) and os.path.getsize(dest) > 100_000:
+        logger.info(f"Using cached download: {dest} ({os.path.getsize(dest)//1024} KB)")
         return dest
+    elif os.path.exists(dest):
+        logger.warning(f"Cached file too small ({os.path.getsize(dest)} bytes) – re-downloading")
+        os.remove(dest)
 
     logger.info("STEP 1a: Attempting download via pytube...")
     try:

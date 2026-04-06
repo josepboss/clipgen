@@ -1,8 +1,9 @@
-pytube==15.0.0
-youtube-transcript-api==1.2.4
-opencv-python-headless==4.13.0.92
-python-dotenv==1.2.2
-requests==2.33.1
-yt-dlp==2026.3.17
-numpy==2.2.6
 flask>=3.0.0
+Werkzeug>=3.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+yt-dlp>=2024.1.1
+pytube>=15.0.0
+youtube-transcript-api>=1.2.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0

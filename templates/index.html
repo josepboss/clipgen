@@ -11,6 +11,7 @@
       --bg: #0d0d0f;
       --surface: #18181b;
       --surface2: #232328;
+      --surface3: #2a2a30;
       --border: #2e2e35;
       --accent: #7c3aed;
       --accent-hover: #6d28d9;
@@ -18,6 +19,7 @@
       --text: #f4f4f5;
       --muted: #71717a;
       --success: #22c55e;
+      --warning: #f59e0b;
       --error: #ef4444;
       --radius: 12px;
     }
@@ -30,41 +32,58 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 48px 20px 80px;
+      padding: 40px 20px 80px;
     }
 
+    /* ── Header ── */
     header {
-      text-align: center;
-      margin-bottom: 48px;
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 36px;
     }
-    header h1 {
-      font-size: 2.2rem;
+    .brand { text-align: left; }
+    .brand h1 {
+      font-size: 1.9rem;
       font-weight: 800;
       letter-spacing: -0.5px;
       background: linear-gradient(135deg, #a78bfa, #7c3aed);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    header p {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
+    .brand p { margin-top: 4px; color: var(--muted); font-size: 0.85rem; }
 
+    .btn-settings {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-settings:hover { color: var(--text); border-color: var(--accent); }
+    .btn-settings svg { flex-shrink: 0; }
+
+    /* ── Card ── */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 32px;
+      padding: 28px;
       width: 100%;
       max-width: 680px;
     }
 
-    .input-row {
-      display: flex;
-      gap: 10px;
-      align-items: stretch;
-    }
+    /* ── Input row ── */
+    .input-row { display: flex; gap: 10px; align-items: stretch; }
     .input-row input {
       flex: 1;
       background: var(--surface2);
@@ -78,8 +97,9 @@
     }
     .input-row input:focus { border-color: var(--accent); }
     .input-row input::placeholder { color: var(--muted); }
+    .input-row input:disabled { opacity: 0.5; }
 
-    .input-row button {
+    .btn-primary {
       background: var(--accent);
       border: none;
       border-radius: 8px;
@@ -91,18 +111,18 @@
       white-space: nowrap;
       transition: background 0.2s, box-shadow 0.2s;
     }
-    .input-row button:hover:not(:disabled) {
+    .btn-primary:hover:not(:disabled) {
       background: var(--accent-hover);
       box-shadow: 0 0 18px var(--accent-glow);
     }
-    .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .options-row {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-top: 14px;
-      font-size: 0.85rem;
+      margin-top: 12px;
+      font-size: 0.83rem;
       color: var(--muted);
     }
     .options-row label { display: flex; align-items: center; gap: 6px; }
@@ -112,21 +132,48 @@
       border-radius: 6px;
       color: var(--text);
       padding: 4px 8px;
-      font-size: 0.85rem;
+      font-size: 0.83rem;
       outline: none;
     }
 
-    /* Progress section */
-    #progress-section { display: none; margin-top: 28px; }
+    /* ── Postiz banner ── */
+    #postiz-banner {
+      display: none;
+      margin-top: 14px;
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      color: var(--warning);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #postiz-banner button {
+      background: none;
+      border: 1px solid var(--warning);
+      border-radius: 6px;
+      color: var(--warning);
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #postiz-banner button:hover { background: rgba(245,158,11,0.12); }
+
+    /* ── Progress ── */
+    #progress-section { display: none; margin-top: 24px; }
 
     .progress-header {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     .spinner {
-      width: 18px; height: 18px;
+      width: 16px; height: 16px;
       border: 2.5px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
@@ -134,14 +181,14 @@
       flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .progress-header span { font-weight: 600; font-size: 0.95rem; }
+    .progress-header span { font-weight: 600; font-size: 0.9rem; }
 
     .progress-bar-wrap {
       background: var(--surface2);
       border-radius: 99px;
-      height: 6px;
+      height: 5px;
       overflow: hidden;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .progress-bar-fill {
       height: 100%;
@@ -151,77 +198,55 @@
       width: 0%;
     }
 
-    .steps-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+    .steps-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
     .step-item {
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 0.875rem;
+      font-size: 0.85rem;
       color: var(--muted);
       transition: color 0.3s;
     }
     .step-item.active { color: var(--text); }
-    .step-item.done { color: var(--success); }
+    .step-item.done   { color: var(--success); }
     .step-dot {
-      width: 8px; height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: var(--border);
       flex-shrink: 0;
       transition: background 0.3s;
     }
     .step-item.active .step-dot { background: var(--accent); }
-    .step-item.done .step-dot { background: var(--success); }
+    .step-item.done   .step-dot { background: var(--success); }
 
-    .step-detail {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-left: 18px;
-      margin-top: 2px;
-    }
+    .step-detail { font-size: 0.78rem; color: var(--muted); margin-left: 18px; margin-top: 4px; }
 
-    /* Error */
     .error-box {
       display: none;
-      margin-top: 20px;
-      background: rgba(239,68,68,0.1);
+      margin-top: 16px;
+      background: rgba(239,68,68,0.09);
       border: 1px solid rgba(239,68,68,0.3);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 12px 14px;
       color: var(--error);
-      font-size: 0.875rem;
+      font-size: 0.855rem;
     }
 
-    /* Results */
-    #results-section { display: none; margin-top: 36px; }
-    #results-section h2 {
-      font-size: 1.1rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-      color: var(--text);
-    }
+    /* ── Results ── */
+    #results-section { display: none; margin-top: 28px; }
+    #results-section h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 14px; }
 
-    .clips-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+    .clips-grid { display: flex; flex-direction: column; gap: 18px; }
 
     .clip-card {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
     }
     .clip-card video {
       width: 100%;
-      max-height: 420px;
+      max-height: 400px;
       object-fit: contain;
       background: #000;
       display: block;
@@ -230,64 +255,206 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 16px;
-      gap: 10px;
+      padding: 11px 14px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .clip-name {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 600;
       color: var(--text);
       font-family: monospace;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .btn-download {
+    .clip-actions { display: flex; gap: 7px; flex-shrink: 0; }
+
+    .btn-dl {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      background: var(--accent);
-      color: #fff;
+      gap: 5px;
+      background: var(--surface3);
+      color: var(--text);
       text-decoration: none;
       border-radius: 7px;
-      padding: 7px 14px;
-      font-size: 0.8rem;
+      padding: 7px 13px;
+      font-size: 0.78rem;
       font-weight: 600;
+      border: 1px solid var(--border);
       transition: background 0.2s;
       white-space: nowrap;
     }
-    .btn-download:hover { background: var(--accent-hover); }
+    .btn-dl:hover { background: var(--border); }
+
+    .btn-schedule {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 7px 13px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn-schedule:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-schedule:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .btn-reset {
       display: block;
-      margin: 24px auto 0;
+      margin: 20px auto 0;
       background: transparent;
       border: 1px solid var(--border);
       color: var(--muted);
       border-radius: 8px;
-      padding: 9px 20px;
-      font-size: 0.85rem;
+      padding: 8px 18px;
+      font-size: 0.82rem;
       cursor: pointer;
       transition: border-color 0.2s, color 0.2s;
     }
     .btn-reset:hover { border-color: var(--accent); color: var(--text); }
 
-    footer {
-      margin-top: 48px;
-      font-size: 0.78rem;
-      color: var(--muted);
-      text-align: center;
+    footer { margin-top: 44px; font-size: 0.76rem; color: var(--muted); text-align: center; }
+
+    /* ── Modals ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 460px;
+      position: relative;
+    }
+    .modal h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 20px; }
+
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close:hover { color: var(--text); background: var(--surface2); }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus { border-color: var(--accent); }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+    .form-group input[type="password"]:not(:placeholder-shown) { letter-spacing: 0.15em; }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .modal-actions .btn-primary { flex: 1; padding: 11px; }
+    .btn-outline {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 11px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-outline:hover { color: var(--text); border-color: var(--accent); }
+
+    .feedback {
+      display: none;
+      margin-top: 12px;
+      font-size: 0.82rem;
+      border-radius: 7px;
+      padding: 9px 12px;
+    }
+    .feedback.success {
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: var(--success);
+    }
+    .feedback.error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--error);
+    }
+
+    /* Key hint */
+    .key-hint { font-size: 0.74rem; color: var(--muted); margin-top: 5px; }
   </style>
 </head>
 <body>
 
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
 <header>
-  <h1>ClipGen</h1>
-  <p>Paste a YouTube URL — get vertical short clips, automatically.</p>
+  <div class="brand">
+    <h1>ClipGen</h1>
+    <p>Paste a YouTube URL — get vertical short clips, automatically.</p>
+  </div>
+  <button class="btn-settings" onclick="openSettings()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    Settings
+  </button>
 </header>
 
+<!-- ── Main card ───────────────────────────────────────────────────────────── -->
 <div class="card">
+
   <div class="input-row">
     <input id="url-input" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
-    <button id="submit-btn" onclick="startJob()">Generate Clips</button>
+    <button id="submit-btn" class="btn-primary" onclick="startJob()">Generate Clips</button>
   </div>
   <div class="options-row">
     <label>
@@ -300,6 +467,12 @@
     </label>
   </div>
 
+  <!-- Postiz not-configured banner -->
+  <div id="postiz-banner" style="display:none">
+    <span>Postiz not configured — scheduling is disabled.</span>
+    <button onclick="openSettings()">Configure</button>
+  </div>
+
   <!-- Progress -->
   <div id="progress-section">
     <div class="progress-header">
@@ -310,21 +483,11 @@
       <div class="progress-bar-fill" id="progress-bar"></div>
     </div>
     <ul class="steps-list" id="steps-list">
-      <li class="step-item" data-step="downloading">
-        <div class="step-dot"></div><span>Download video</span>
-      </li>
-      <li class="step-item" data-step="transcript">
-        <div class="step-dot"></div><span>Extract transcript</span>
-      </li>
-      <li class="step-item" data-step="segmenting">
-        <div class="step-dot"></div><span>Build segments</span>
-      </li>
-      <li class="step-item" data-step="scoring">
-        <div class="step-dot"></div><span>AI scoring</span>
-      </li>
-      <li class="step-item" data-step="processing">
-        <div class="step-dot"></div><span>Process clips</span>
-      </li>
+      <li class="step-item" data-step="downloading"><div class="step-dot"></div><span>Download video</span></li>
+      <li class="step-item" data-step="transcript"><div class="step-dot"></div><span>Extract transcript</span></li>
+      <li class="step-item" data-step="segmenting"><div class="step-dot"></div><span>Build segments</span></li>
+      <li class="step-item" data-step="scoring"><div class="step-dot"></div><span>AI scoring</span></li>
+      <li class="step-item" data-step="processing"><div class="step-dot"></div><span>Process clips</span></li>
     </ul>
     <div id="step-detail" class="step-detail"></div>
     <div id="error-box" class="error-box"></div>
@@ -332,58 +495,155 @@
 
   <!-- Results -->
   <div id="results-section">
-    <h2 id="results-title">Ready — your clips:</h2>
+    <h2 id="results-title">Your clips:</h2>
     <div class="clips-grid" id="clips-grid"></div>
-    <button class="btn-reset" onclick="reset()">Generate another</button>
+    <button class="btn-reset" onclick="resetUI()">Generate another</button>
+  </div>
+
+</div>
+
+<footer>ClipGen runs locally — your data never leaves this machine.</footer>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Settings Modal
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="settings-modal" onclick="closeIfBackdrop(event,'settings-modal')">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('settings-modal')">&times;</button>
+    <h2>Settings — Postiz Integration</h2>
+
+    <div class="form-group">
+      <label>Postiz API Key</label>
+      <input type="password" id="cfg-api-key" placeholder="Paste your API key" autocomplete="off" />
+      <p class="key-hint" id="cfg-key-hint"></p>
+    </div>
+    <div class="form-group">
+      <label>Postiz Base URL</label>
+      <input type="url" id="cfg-base-url" placeholder="https://your-postiz.example.com" />
+    </div>
+
+    <div id="settings-feedback" class="feedback"></div>
+
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('settings-modal')">Cancel</button>
+      <button class="btn-primary" onclick="saveSettings()">Save</button>
+    </div>
   </div>
 </div>
 
-<footer>ClipGen runs locally — your API key stays private.</footer>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Schedule Modal
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="schedule-modal" onclick="closeIfBackdrop(event,'schedule-modal')">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('schedule-modal')">&times;</button>
+    <h2 id="schedule-modal-title">Schedule Post</h2>
+
+    <input type="hidden" id="schedule-video-path" />
+
+    <div class="form-group">
+      <label>Caption</label>
+      <textarea id="schedule-caption" placeholder="Write a caption for this clip…"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Scheduled Date &amp; Time</label>
+      <input type="datetime-local" id="schedule-time" />
+    </div>
+    <div class="form-group">
+      <label>Platform <span style="font-weight:400;text-transform:none">(optional)</span></label>
+      <select id="schedule-platform">
+        <option value="">— Auto / all connected —</option>
+        <option value="twitter">Twitter / X</option>
+        <option value="instagram">Instagram</option>
+        <option value="tiktok">TikTok</option>
+        <option value="youtube">YouTube Shorts</option>
+        <option value="linkedin">LinkedIn</option>
+        <option value="facebook">Facebook</option>
+      </select>
+    </div>
+
+    <div id="schedule-feedback" class="feedback"></div>
+
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('schedule-modal')">Cancel</button>
+      <button class="btn-primary" id="schedule-submit-btn" onclick="submitSchedule()">Schedule</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
   const STEP_ORDER = ['downloading','transcript','segmenting','scoring','processing','done'];
   let pollTimer = null;
   let currentJobId = null;
+  let postizConfigured = false;
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+
+  (async function boot() {
+    await fetchPostizStatus();
+    // Set default scheduled time to +1 hour
+    const dt = new Date(Date.now() + 3600_000);
+    dt.setSeconds(0, 0);
+    document.getElementById('schedule-time').value =
+      dt.toISOString().slice(0, 16);
+  })();
+
+  async function fetchPostizStatus() {
+    try {
+      const res = await fetch('/config');
+      const data = await res.json();
+      postizConfigured = data.configured;
+      document.getElementById('postiz-banner').style.display =
+        postizConfigured ? 'none' : 'flex';
+      if (data.postiz_api_key) {
+        document.getElementById('cfg-key-hint').textContent =
+          'Current key: ' + data.postiz_api_key;
+      }
+      if (data.postiz_base_url) {
+        document.getElementById('cfg-base-url').value = data.postiz_base_url;
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  // ── Clip generation ───────────────────────────────────────────────────────
 
   function setStepStates(currentStep) {
-    const items = document.querySelectorAll('#steps-list .step-item');
-    items.forEach(el => {
-      const step = el.dataset.step;
-      const stepIdx = STEP_ORDER.indexOf(step);
-      const curIdx = STEP_ORDER.indexOf(currentStep);
+    document.querySelectorAll('#steps-list .step-item').forEach(el => {
+      const s = el.dataset.step;
       el.classList.remove('active','done');
-      if (step === currentStep) el.classList.add('active');
-      else if (stepIdx < curIdx) el.classList.add('done');
+      if (s === currentStep) el.classList.add('active');
+      else if (STEP_ORDER.indexOf(s) < STEP_ORDER.indexOf(currentStep)) el.classList.add('done');
     });
   }
 
   async function startJob() {
     const url = document.getElementById('url-input').value.trim();
-    const top = document.getElementById('top-select').value;
-    const errorBox = document.getElementById('error-box');
-
+    const top  = document.getElementById('top-select').value;
     if (!url) { showError('Please enter a YouTube URL.'); return; }
 
-    errorBox.style.display = 'none';
+    document.getElementById('error-box').style.display = 'none';
     document.getElementById('submit-btn').disabled = true;
-    document.getElementById('url-input').disabled = true;
-    document.getElementById('results-section').style.display = 'none';
+    document.getElementById('url-input').disabled  = true;
+    document.getElementById('results-section').style.display  = 'none';
     document.getElementById('progress-section').style.display = 'block';
     document.getElementById('spinner').style.display = '';
     setStepStates('queued');
     setProgress(0, 'Starting…', '');
 
     try {
-      const res = await fetch('/process', {
+      const res  = await fetch('/process', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ url, top: parseInt(top) }),
       });
       const data = await res.json();
-      if (!res.ok) { showError(data.error || 'Failed to start job.'); return; }
+      if (!res.ok) { showError(data.error || 'Failed to start.'); return; }
       currentJobId = data.job_id;
       pollTimer = setInterval(poll, 1800);
-    } catch (e) {
+    } catch(e) {
       showError('Network error — is the server running?');
     }
   }
@@ -391,86 +651,224 @@
   async function poll() {
     if (!currentJobId) return;
     try {
-      const res = await fetch(`/status/${currentJobId}`);
+      const res  = await fetch(`/status/${currentJobId}`);
       const data = await res.json();
-      if (!res.ok) { showError(data.error || 'Status check failed.'); clearInterval(pollTimer); return; }
-
+      if (!res.ok) { showError(data.error || 'Status error.'); clearInterval(pollTimer); return; }
       setProgress(data.progress, data.step_label, data.detail);
       setStepStates(data.step);
-
       if (data.error) {
         clearInterval(pollTimer);
         showError(data.error);
         document.getElementById('spinner').style.display = 'none';
         return;
       }
-
       if (data.done) {
         clearInterval(pollTimer);
         document.getElementById('spinner').style.display = 'none';
         showResults(data.clips);
       }
-    } catch (e) {
-      /* transient network error — keep polling */
-    }
+    } catch(e) { /* transient — keep polling */ }
   }
 
   function setProgress(pct, label, detail) {
-    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-bar').style.width        = pct + '%';
     document.getElementById('current-step-label').textContent = label;
-    document.getElementById('step-detail').textContent = detail;
+    document.getElementById('step-detail').textContent         = detail;
   }
 
   function showError(msg) {
-    const box = document.getElementById('error-box');
-    box.textContent = msg;
-    box.style.display = 'block';
+    const b = document.getElementById('error-box');
+    b.textContent = msg;
+    b.style.display = 'block';
     document.getElementById('submit-btn').disabled = false;
-    document.getElementById('url-input').disabled = false;
+    document.getElementById('url-input').disabled  = false;
   }
 
   function showResults(clips) {
     setProgress(100, 'Done!', `${clips.length} clip(s) generated`);
     const grid = document.getElementById('clips-grid');
     grid.innerHTML = '';
+
     clips.forEach(name => {
       const card = document.createElement('div');
       card.className = 'clip-card';
+
+      const scheduleDisabled = !postizConfigured ? 'disabled title="Configure Postiz in Settings"' : '';
       card.innerHTML = `
         <video controls playsinline preload="metadata">
           <source src="/output/${encodeURIComponent(name)}" type="video/mp4" />
         </video>
         <div class="clip-footer">
           <span class="clip-name">${name}</span>
-          <a class="btn-download" href="/download/${encodeURIComponent(name)}" download="${name}">
-            &#8595; Download
-          </a>
+          <div class="clip-actions">
+            <a class="btn-dl" href="/download/${encodeURIComponent(name)}" download="${name}">
+              &#8595; Download
+            </a>
+            <button class="btn-schedule" ${scheduleDisabled}
+              onclick="openSchedule('${name}')">
+              &#128198; Schedule
+            </button>
+          </div>
         </div>`;
       grid.appendChild(card);
     });
+
     document.getElementById('results-title').textContent =
       `${clips.length} clip${clips.length !== 1 ? 's' : ''} ready:`;
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('submit-btn').disabled = false;
-    document.getElementById('url-input').disabled = false;
+    document.getElementById('url-input').disabled  = false;
   }
 
-  function reset() {
+  function resetUI() {
     clearInterval(pollTimer);
     currentJobId = null;
-    document.getElementById('url-input').value = '';
+    document.getElementById('url-input').value   = '';
     document.getElementById('url-input').disabled = false;
     document.getElementById('submit-btn').disabled = false;
     document.getElementById('progress-section').style.display = 'none';
-    document.getElementById('results-section').style.display = 'none';
-    document.getElementById('error-box').style.display = 'none';
-    document.getElementById('progress-bar').style.width = '0%';
-    document.querySelectorAll('#steps-list .step-item').forEach(el => el.classList.remove('active','done'));
+    document.getElementById('results-section').style.display  = 'none';
+    document.getElementById('error-box').style.display        = 'none';
+    document.getElementById('progress-bar').style.width       = '0%';
+    document.querySelectorAll('#steps-list .step-item').forEach(el =>
+      el.classList.remove('active','done'));
     document.getElementById('url-input').focus();
   }
 
   document.getElementById('url-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') startJob();
+  });
+
+  // ── Settings modal ────────────────────────────────────────────────────────
+
+  function openSettings() {
+    showFeedback('settings-feedback', '', '');
+    document.getElementById('cfg-api-key').value = '';
+    openModal('settings-modal');
+  }
+
+  async function saveSettings() {
+    const apiKey  = document.getElementById('cfg-api-key').value.trim();
+    const baseUrl = document.getElementById('cfg-base-url').value.trim();
+
+    if (!apiKey && !baseUrl) {
+      showFeedback('settings-feedback', 'error', 'Enter at least one field.');
+      return;
+    }
+    if (baseUrl && !baseUrl.startsWith('http')) {
+      showFeedback('settings-feedback', 'error', 'Base URL must start with http:// or https://');
+      return;
+    }
+
+    const body = {};
+    if (apiKey)  body.postiz_api_key  = apiKey;
+    if (baseUrl) body.postiz_base_url = baseUrl;
+
+    try {
+      const res  = await fetch('/config', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showFeedback('settings-feedback', 'error', data.error || 'Save failed.');
+      } else {
+        showFeedback('settings-feedback', 'success', 'Settings saved successfully.');
+        await fetchPostizStatus();
+        // Refresh schedule buttons
+        document.querySelectorAll('.btn-schedule').forEach(btn => {
+          btn.disabled = !postizConfigured;
+          if (postizConfigured) btn.removeAttribute('title');
+        });
+        setTimeout(() => closeModal('settings-modal'), 1200);
+      }
+    } catch(e) {
+      showFeedback('settings-feedback', 'error', 'Network error.');
+    }
+  }
+
+  // ── Schedule modal ────────────────────────────────────────────────────────
+
+  function openSchedule(filename) {
+    document.getElementById('schedule-video-path').value = filename;
+    document.getElementById('schedule-modal-title').textContent = `Schedule: ${filename}`;
+    document.getElementById('schedule-caption').value = '';
+    document.getElementById('schedule-platform').value = '';
+    showFeedback('schedule-feedback', '', '');
+    document.getElementById('schedule-submit-btn').disabled = false;
+
+    const dt = new Date(Date.now() + 3600_000);
+    dt.setSeconds(0, 0);
+    document.getElementById('schedule-time').value = dt.toISOString().slice(0, 16);
+
+    openModal('schedule-modal');
+  }
+
+  async function submitSchedule() {
+    const videoPath     = document.getElementById('schedule-video-path').value;
+    const caption       = document.getElementById('schedule-caption').value.trim();
+    const scheduledTime = document.getElementById('schedule-time').value;
+    const platform      = document.getElementById('schedule-platform').value;
+
+    if (!caption) { showFeedback('schedule-feedback', 'error', 'Caption is required.'); return; }
+    if (!scheduledTime) { showFeedback('schedule-feedback', 'error', 'Please pick a date and time.'); return; }
+
+    document.getElementById('schedule-submit-btn').disabled = true;
+    showFeedback('schedule-feedback', '', 'Scheduling…');
+
+    try {
+      const res  = await fetch('/schedule', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          video_path:     videoPath,
+          caption,
+          scheduled_time: scheduledTime,
+          platform:       platform || null,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showFeedback('schedule-feedback', 'success',
+          `Scheduled successfully${data.post_id && data.post_id !== 'unknown' ? ' (ID: ' + data.post_id + ')' : ''}.`);
+        setTimeout(() => closeModal('schedule-modal'), 2000);
+      } else {
+        showFeedback('schedule-feedback', 'error', data.error || 'Scheduling failed.');
+        document.getElementById('schedule-submit-btn').disabled = false;
+      }
+    } catch(e) {
+      showFeedback('schedule-feedback', 'error', 'Network error.');
+      document.getElementById('schedule-submit-btn').disabled = false;
+    }
+  }
+
+  // ── Modal helpers ─────────────────────────────────────────────────────────
+
+  function openModal(id) {
+    document.getElementById(id).classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  function closeIfBackdrop(e, id) {
+    if (e.target.id === id) closeModal(id);
+  }
+  function showFeedback(id, type, msg) {
+    const el = document.getElementById(id);
+    el.className = 'feedback' + (type ? ' ' + type : '');
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeModal('settings-modal');
+      closeModal('schedule-modal');
+    }
   });
 </script>
 </body>

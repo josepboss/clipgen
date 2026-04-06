@@ -1,0 +1,127 @@
+POSTIZ INTEGRATION + DYNAMIC CONFIGURATION (FULLY IMPLEMENTED):
+
+Integrate Postiz API to allow scheduling generated clips directly from the UI, with runtime-configurable credentials managed inside the application (no .env usage for Postiz).
+
+CONFIGURATION STORAGE:
+
+- Create config.json file:
+  {
+    "postiz_api_key": "",
+    "postiz_base_url": ""
+  }
+
+- Create config_manager.py:
+  - load_config()
+  - save_config(data)
+  - update_config(key, value)
+
+- All Postiz credentials must be read from config.json (NOT .env)
+
+BACKEND (POSTIZ CLIENT):
+
+- Create postiz_client.py
+- Implement:
+  schedule_post(video_path, caption, scheduled_time, platform=None)
+
+- Behavior:
+  - Load API key + base URL from config_manager
+  - Upload video file via HTTP request
+  - Create scheduled post using Postiz API
+  - Return success/error response
+
+API ROUTES:
+
+1. POST /schedule
+   - Input:
+     {
+       "video_path": "...",
+       "caption": "...",
+       "scheduled_time": "...",
+       "platform": "optional"
+     }
+   - Calls postiz_client.schedule_post()
+   - Returns JSON success/error
+
+2. GET /config
+   - Returns:
+     {
+       "postiz_api_key": "******abcd",
+       "postiz_base_url": "..."
+     }
+
+3. POST /config
+   - Input:
+     {
+       "postiz_api_key": "...",
+       "postiz_base_url": "..."
+     }
+   - Validate inputs
+   - Save to config.json
+
+UI REQUIREMENTS:
+
+MAIN RESULTS PAGE:
+- For each generated clip:
+  - Video preview player
+  - Download button
+  - "Schedule Post" button
+
+ON "Schedule Post" CLICK:
+- Open modal form with:
+  - Caption input
+  - Platform selection (if supported)
+  - Date/time picker
+
+- On submit:
+  - Send POST /schedule request
+  - Show:
+    - success message: "Scheduled successfully"
+    - error message if failed
+
+SETTINGS PAGE:
+
+- Accessible from UI
+- Fields:
+  - Postiz API Key (masked after save)
+  - Postiz Base URL
+- Save button
+
+SETTINGS BEHAVIOR:
+- On load: fetch via GET /config
+- On save: POST /config
+- Show success/error feedback
+
+SECURITY:
+
+- Never expose full API key in frontend after saving
+- Mask API key (e.g. ******abcd)
+- All Postiz API calls must be server-side only
+- Store config.json securely on server
+
+INTEGRATION RULES:
+
+- postiz_client.py must use config_manager (NOT .env)
+- If config is missing or invalid:
+  - Disable "Schedule Post" buttons in UI
+  - Display message: "Postiz not configured"
+
+CONSTRAINTS:
+
+- Scheduling must be optional
+- Clip generation must work independently of Postiz
+- Postiz failures must NOT break the main pipeline
+- Validate all user inputs before API calls
+
+FILE STRUCTURE UPDATE:
+
+- postiz_client.py
+- config_manager.py
+- config.json
+- New routes:
+  - POST /schedule
+  - GET /config
+  - POST /config
+
+FINAL BEHAVIOR:
+
+User generates clips → views results → optionally schedules any clip → manages Postiz API credentials from Settings → changes apply instantly without restarting system

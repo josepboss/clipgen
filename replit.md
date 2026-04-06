@@ -41,9 +41,10 @@ python main.py "<youtube_url>" --top 3 --output my_clips
 |------|---------|
 | `main.py` | CLI entry point |
 | `processor.py` | Pipeline orchestration |
-| `transcript.py` | Transcript extraction + fallback |
+| `downloader.py` | pytube download → yt-dlp fallback, saves as `input.mp4` |
+| `transcript.py` | Transcript extraction + Whisper fallback |
 | `ai_selector.py` | OpenRouter AI scoring |
-| `video_editor.py` | FFmpeg + OpenCV processing |
+| `video_editor.py` | FFmpeg cut + OpenCV face tracking + vertical encode |
 | `utils.py` | Shared helpers |
 | `requirements.txt` | Python dependencies |
 

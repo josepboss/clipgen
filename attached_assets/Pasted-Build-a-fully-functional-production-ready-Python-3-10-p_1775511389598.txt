@@ -1,0 +1,118 @@
+Build a fully functional, production-ready Python 3.10 project that generates vertical short-form video clips from a YouTube video URL. The system must run end-to-end without placeholders or mocked logic.
+
+GOAL:
+Input a YouTube URL → automatically extract the best segments → generate vertical (9:16) short clips with face-centered cropping → save as MP4 files.
+
+INPUT:
+- Command line usage:
+  python main.py "<youtube_url>"
+
+DEPENDENCIES:
+- pytube
+- yt-dlp (fallback downloader via subprocess)
+- youtube-transcript-api
+- opencv-python
+- ffmpeg (must be invoked via subprocess, not wrappers)
+- python-dotenv
+- requests
+
+VIDEO DOWNLOAD:
+1. Attempt to download using pytube
+2. If pytube fails, fallback to yt-dlp via subprocess
+3. Ensure highest quality MP4 is downloaded
+4. Save video locally as input.mp4
+
+TRANSCRIPT HANDLING:
+1. Attempt to fetch transcript using youtube-transcript-api
+2. If unavailable, fallback to Whisper API via OpenRouter
+3. Output must be a list of timestamped text segments
+
+SEGMENTATION:
+- Combine transcript into continuous segments between 30 and 90 seconds
+- Ensure segments are coherent (do not cut mid-sentence)
+
+AI SCORING (MANDATORY):
+- Use OpenRouter API (not OpenAI directly)
+- Model priority:
+  1. qwen/qwen3-32b (default)
+  2. deepseek-chat (fallback)
+
+REQUEST FORMAT:
+- Send all segments in one request if possible
+
+STRICT OUTPUT FORMAT:
+The model MUST return valid JSON only:
+[
+  {
+    "start": <seconds>,
+    "end": <seconds>,
+    "score": <0-10 float>,
+    "reason": "<short explanation>"
+  }
+]
+
+- Reject any non-JSON output
+- Retry once if parsing fails
+- Fallback to secondary model if needed
+- Select top 3–5 segments by score
+
+VIDEO PROCESSING:
+- Use FFmpeg via subprocess for:
+  - cutting clips (accurate timestamps)
+  - scaling to vertical 1080x1920
+- Ensure no black bars (crop, don’t pad)
+- Preserve audio and sync properly
+- Normalize audio levels
+
+FACE DETECTION:
+- Use OpenCV Haar cascade
+- Detect face per frame
+- Track face position across frames
+- Apply smooth horizontal crop to keep face centered
+- If no face detected, fallback to center crop
+
+OUTPUT:
+- Save clips in /output directory
+- Filenames:
+  clip_01.mp4, clip_02.mp4, ...
+- Encoding:
+  - video: H.264
+  - audio: AAC
+- Ensure files are valid and playable
+
+PROJECT STRUCTURE:
+- main.py (CLI entry point)
+- processor.py (pipeline orchestration)
+- downloader.py (pytube + yt-dlp fallback)
+- transcript.py (transcript + Whisper fallback)
+- ai_selector.py (OpenRouter API + JSON parsing)
+- video_editor.py (FFmpeg + OpenCV processing)
+- utils.py (helpers)
+- requirements.txt
+- .env (API keys)
+
+CONFIG:
+- Load OPENROUTER_API_KEY from .env
+- Do not hardcode secrets
+
+ERROR HANDLING:
+- Handle invalid YouTube URLs
+- Handle download failures (fallback logic required)
+- Handle missing transcripts
+- Handle API failures (retry + fallback model)
+- Handle FFmpeg errors
+- Print clear logs at each step
+
+CONSTRAINTS:
+- No pseudo-code
+- No mock implementations
+- All modules must be fully implemented
+- Must run on Linux VPS without modification
+- Use subprocess for FFmpeg and yt-dlp
+
+FINAL REQUIREMENT:
+After running:
+  pip install -r requirements.txt
+  python main.py "<youtube_url>"
+
+The system must automatically generate real, correctly formatted vertical video clips in the output folder without manual intervention.

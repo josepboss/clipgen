@@ -1,9 +1,10 @@
 import os
 import shutil
 from utils import logger, ensure_output_dir
+from downloader import download_video
 from transcript import fetch_transcript, build_segments
 from ai_selector import score_segments
-from video_editor import download_video, cut_clip, process_to_vertical
+from video_editor import cut_clip, process_to_vertical
 
 
 def run_pipeline(url: str, output_dir: str = "output", top_n: int = 5) -> list[str]:
@@ -50,7 +51,7 @@ def run_pipeline(url: str, output_dir: str = "output", top_n: int = 5) -> list[s
         temp_path = os.path.join(temps_dir, f"{clip_label}_raw.mp4")
         final_path = os.path.join(output_dir, f"{clip_label}.mp4")
 
-        logger.info(f"Processing {clip_label}: {start:.1f}s - {end:.1f}s")
+        logger.info(f"Processing {clip_label}: {start:.1f}s – {end:.1f}s")
         cut_clip(source_video, start, end, temp_path)
         process_to_vertical(temp_path, final_path)
         output_files.append(final_path)

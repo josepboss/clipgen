@@ -1,0 +1,56 @@
+Let me read the current files before making changes:
+
+
+3 actions
+Now I'll write all four new/updated files at once:
+
+
+4 actions
+Now update app.py with the three new routes and rewrite the full frontend:
+
+
+2 actions
+Now write the full updated frontend:
+
+
+2 actions
+Now restart the server and verify all imports are clean:
+
+
+2 actions
+All clean. Now restart to pick up all changes:
+
+
+2 actions
+Let me verify the new endpoints are responding:
+
+
+2 actions
+Everything is live. Here's a summary of everything added:
+
+New: config_manager.py — thread-safe config persistence
+
+load_config() / save_config() / update_config() operate on config.json
+is_configured() — returns true only when both API key and base URL are set
+mask_api_key() — returns ••••••xxxx so the raw key never reaches the frontend
+New: config.json — credential store (API key + base URL, starts empty)
+
+New: postiz_client.py — full Postiz API client
+
+Reads credentials from config_manager, never from .env
+Uploads the video file as multipart to /api/media
+Creates the scheduled post at /api/posts with caption, ISO 8601 time, optional platform
+Gracefully returns {"success": false, "error": "..."} on any failure — never throws to the pipeline
+Updated: app.py — three new routes
+
+GET /config — returns masked API key + base URL + configured flag
+POST /config — validates and saves credentials to config.json
+POST /schedule — calls postiz_client.schedule_post() and returns result
+Updated: templates/index.html — fully redesigned UI
+
+Settings button (gear icon) in the header opens the Settings modal
+Settings modal — API key (password field, masked after save) + Base URL, with save feedback
+Postiz banner — yellow warning strip appears below the URL input when Postiz isn't configured, with a "Configure" shortcut button
+Schedule button per clip — disabled with tooltip when Postiz isn't set up; enabled automatically after saving credentials in Settings
+Schedule modal — caption textarea, datetime picker (defaults to +1 hour), optional platform dropdown; shows "Scheduled successfully" or a clear error message
+Pressing Escape closes any open modal

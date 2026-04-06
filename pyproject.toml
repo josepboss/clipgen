@@ -1,0 +1,13 @@
+[project]
+name = "repl-nix-workspace"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python-headless>=4.13.0.92",
+    "python-dotenv>=1.2.2",
+    "pytube>=15.0.0",
+    "requests>=2.33.1",
+    "youtube-transcript-api>=1.2.4",
+    "yt-dlp>=2026.3.17",
+]

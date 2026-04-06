@@ -47,3 +47,23 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ClipGen runtime directories
+output/
+downloads/
+temp_clips/

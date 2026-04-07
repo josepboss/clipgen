@@ -431,6 +431,170 @@
 
     /* Key hint */
     .key-hint { font-size: 0.74rem; color: var(--muted); margin-top: 5px; }
+
+    /* ── Connected Accounts card ── */
+    .accounts-card {
+      margin-top: 16px;
+    }
+    .accounts-card h3 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .account-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .platform-icon {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .platform-icon svg { flex-shrink: 0; }
+    .status-badge {
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 99px;
+      letter-spacing: 0.03em;
+    }
+    .status-badge.connected {
+      background: rgba(34,197,94,0.12);
+      border: 1px solid rgba(34,197,94,0.35);
+      color: var(--success);
+    }
+    .status-badge.not-connected {
+      background: rgba(113,113,122,0.12);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .account-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    .btn-connect {
+      background: #010101;
+      border: 1px solid #333;
+      border-radius: 7px;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-connect:hover:not(:disabled) { background: #1a1a1a; border-color: #555; }
+    .btn-connect:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-disconnect {
+      background: transparent;
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 7px;
+      color: var(--error);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-disconnect:hover { background: rgba(239,68,68,0.08); }
+
+    .connect-hint {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+
+    /* ── TikTok Connect Modal ── */
+    #connect-modal .modal {
+      max-width: 640px;
+      width: 100%;
+    }
+    .connect-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .connect-status-bar.success { color: var(--success); }
+    .connect-status-bar.error   { color: var(--error); }
+    .connect-status-bar.waiting { color: var(--warning); }
+    .connect-status-bar.opening { color: var(--muted); }
+
+    /* Screenshot viewer */
+    .screenshot-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      cursor: crosshair;
+      margin-bottom: 12px;
+    }
+    .screenshot-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      user-select: none;
+      pointer-events: none;
+    }
+    .screenshot-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      gap: 10px;
+    }
+    .screenshot-placeholder .spinner { width: 20px; height: 20px; border-width: 3px; }
+
+    .keyboard-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .keyboard-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .keyboard-row input:focus { border-color: var(--accent); }
+    .keyboard-row input::placeholder { color: var(--muted); }
+
+    .connect-hint-box {
+      font-size: 0.76rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .connect-hint-box b { color: var(--text); }
   </style>
 </head>
 <body>
@@ -502,7 +666,76 @@
 
 </div>
 
+<!-- ── Connected Accounts ───────────────────────────────────────────────────── -->
+<div class="card accounts-card">
+  <h3>Connected Accounts</h3>
+  <div class="account-row">
+    <span class="platform-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/>
+      </svg>
+      TikTok
+    </span>
+    <span id="tiktok-badge" class="status-badge not-connected">Not Connected</span>
+    <div class="account-actions">
+      <button id="btn-connect-tiktok" class="btn-connect" onclick="startConnectTikTok()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Connect TikTok
+      </button>
+      <button id="btn-disconnect-tiktok" class="btn-disconnect" onclick="disconnectTikTok()" style="display:none">
+        Disconnect
+      </button>
+    </div>
+  </div>
+  <p id="tiktok-connect-hint" class="connect-hint" style="display:none"></p>
+</div>
+
 <footer>ClipGen runs locally — your data never leaves this machine.</footer>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TikTok Connect Modal
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="connect-modal" onclick="closeIfBackdrop(event,'connect-modal')">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="cancelConnect()">&times;</button>
+    <h2>Connect TikTok Account</h2>
+
+    <div id="connect-status-bar" class="connect-status-bar opening">
+      <div class="spinner" id="connect-spinner"></div>
+      <span id="connect-status-msg">Opening browser…</span>
+    </div>
+
+    <!-- Live screenshot viewer -->
+    <div class="screenshot-wrap" id="screenshot-wrap" onclick="handleScreenshotClick(event)">
+      <img id="browser-screenshot" alt="TikTok login browser" style="display:none" />
+      <div class="screenshot-placeholder" id="screenshot-placeholder">
+        <div class="spinner"></div>
+        <span>Loading browser…</span>
+      </div>
+    </div>
+
+    <div class="connect-hint-box">
+      <b>How to log in:</b> Click anywhere in the browser view to interact. Use the keyboard field below to type. Press Enter to confirm.
+    </div>
+
+    <!-- Keyboard relay -->
+    <div class="keyboard-row">
+      <input id="keyboard-capture"
+             placeholder="Click here then type to send keystrokes to browser…"
+             autocomplete="off"
+             spellcheck="false"
+             oninput="sendTyping(this)"
+             onkeydown="sendKey(event)" />
+    </div>
+
+    <div id="connect-feedback" class="feedback" style="display:none"></div>
+
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="cancelConnect()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ══════════════════════════════════════════════════════════════════════════
@@ -580,10 +813,16 @@
   let currentJobId = null;
   let postizConfigured = false;
 
+  // ── TikTok connect state ───────────────────────────────────────────────────
+  const TIKTOK_USER_ID = 'default';
+  let connectSSE = null;
+  let screenshotPollTimer = null;
+  let connectActive = false;
+
   // ── Boot ──────────────────────────────────────────────────────────────────
 
   (async function boot() {
-    await fetchPostizStatus();
+    await Promise.all([fetchPostizStatus(), refreshTikTokStatus()]);
     // Set default scheduled time to +1 hour
     const dt = new Date(Date.now() + 3600_000);
     dt.setSeconds(0, 0);
@@ -842,6 +1081,195 @@
       showFeedback('schedule-feedback', 'error', 'Network error.');
       document.getElementById('schedule-submit-btn').disabled = false;
     }
+  }
+
+  // ── TikTok Connection ─────────────────────────────────────────────────────
+
+  async function refreshTikTokStatus() {
+    try {
+      const res  = await fetch('/publisher/session/' + TIKTOK_USER_ID);
+      const data = await res.json();
+      setTikTokUI(data.connected, data.sessionSaved);
+    } catch (_) {}
+  }
+
+  function setTikTokUI(connected, savedAt) {
+    const badge       = document.getElementById('tiktok-badge');
+    const btnConnect  = document.getElementById('btn-connect-tiktok');
+    const btnDisc     = document.getElementById('btn-disconnect-tiktok');
+    const hint        = document.getElementById('tiktok-connect-hint');
+
+    if (connected) {
+      badge.textContent = 'Connected';
+      badge.className   = 'status-badge connected';
+      btnConnect.style.display  = 'none';
+      btnDisc.style.display     = '';
+      if (savedAt) {
+        hint.textContent = 'Session saved: ' + new Date(savedAt).toLocaleString();
+        hint.style.display = '';
+      }
+    } else {
+      badge.textContent = 'Not Connected';
+      badge.className   = 'status-badge not-connected';
+      btnConnect.style.display  = '';
+      btnDisc.style.display     = 'none';
+      hint.style.display = 'none';
+    }
+  }
+
+  async function startConnectTikTok() {
+    if (connectActive) return;
+    connectActive = true;
+
+    // Reset modal state
+    setConnectStatusUI('opening', 'Opening browser…');
+    document.getElementById('browser-screenshot').style.display = 'none';
+    document.getElementById('screenshot-placeholder').style.display = 'flex';
+    showConnectFeedback('', '');
+    openModal('connect-modal');
+
+    // Open SSE connection — this starts the browser on the server
+    connectSSE = new EventSource('/publisher/connect/' + TIKTOK_USER_ID);
+
+    connectSSE.onmessage = (e) => {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (_) { return; }
+
+      setConnectStatusUI(ev.status, ev.message || '');
+
+      if (ev.status === 'waiting') {
+        // Browser is open — start polling for screenshots
+        startScreenshotPoll();
+      } else if (ev.status === 'success') {
+        stopScreenshotPoll();
+        connectSSE.close();
+        connectSSE    = null;
+        connectActive = false;
+        setConnectStatusUI('success', ev.message || 'Session saved!');
+        // Refresh screenshot one last time
+        pollScreenshot();
+        // Show success then auto-close
+        showConnectFeedback('success', 'TikTok account connected successfully!');
+        setTimeout(async () => {
+          closeModal('connect-modal');
+          await refreshTikTokStatus();
+        }, 2000);
+      } else if (ev.status === 'error') {
+        stopScreenshotPoll();
+        connectSSE.close();
+        connectSSE    = null;
+        connectActive = false;
+        showConnectFeedback('error', ev.message || 'An error occurred.');
+      }
+    };
+
+    connectSSE.onerror = () => {
+      if (!connectActive) return;
+      stopScreenshotPoll();
+      connectActive = false;
+      setConnectStatusUI('error', 'Connection lost — please try again.');
+      showConnectFeedback('error', 'Server connection dropped.');
+    };
+  }
+
+  function setConnectStatusUI(status, msg) {
+    const bar     = document.getElementById('connect-status-bar');
+    const msgEl   = document.getElementById('connect-status-msg');
+    const spinner = document.getElementById('connect-spinner');
+    bar.className = 'connect-status-bar ' + status;
+    msgEl.textContent = msg;
+    spinner.style.display = (status === 'opening' || status === 'waiting') ? '' : 'none';
+  }
+
+  function startScreenshotPoll() {
+    if (screenshotPollTimer) return;
+    pollScreenshot(); // immediate first hit
+    screenshotPollTimer = setInterval(pollScreenshot, 2000);
+  }
+
+  function stopScreenshotPoll() {
+    if (screenshotPollTimer) {
+      clearInterval(screenshotPollTimer);
+      screenshotPollTimer = null;
+    }
+  }
+
+  async function pollScreenshot() {
+    try {
+      const res  = await fetch('/publisher/connect/status/' + TIKTOK_USER_ID);
+      const data = await res.json();
+      if (data.screenshot) {
+        const img = document.getElementById('browser-screenshot');
+        img.src = 'data:image/jpeg;base64,' + data.screenshot;
+        img.style.display = 'block';
+        document.getElementById('screenshot-placeholder').style.display = 'none';
+      }
+    } catch (_) {}
+  }
+
+  function handleScreenshotClick(e) {
+    if (!connectActive) return;
+    const wrap = document.getElementById('screenshot-wrap');
+    const rect = wrap.getBoundingClientRect();
+    // Browser viewport is 1280×800; map click onto that space
+    const scaleX = 1280 / rect.width;
+    const scaleY = 800  / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top)  * scaleY);
+    relayInput([{ type: 'click', x, y }]);
+    // Focus keyboard capture after click
+    document.getElementById('keyboard-capture').focus();
+  }
+
+  function sendTyping(input) {
+    const text = input.value;
+    input.value = '';
+    if (text && connectActive) relayInput([{ type: 'type', text }]);
+  }
+
+  function sendKey(e) {
+    const special = ['Enter','Backspace','Tab','Escape','ArrowUp','ArrowDown',
+                     'ArrowLeft','ArrowRight','Delete','Home','End'];
+    if (special.includes(e.key) && connectActive) {
+      e.preventDefault();
+      relayInput([{ type: 'key', key: e.key }]);
+    }
+  }
+
+  async function relayInput(commands) {
+    try {
+      await fetch('/publisher/connect/' + TIKTOK_USER_ID + '/input', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commands }),
+      });
+    } catch (_) {}
+  }
+
+  async function cancelConnect() {
+    stopScreenshotPoll();
+    if (connectSSE) { connectSSE.close(); connectSSE = null; }
+    connectActive = false;
+    closeModal('connect-modal');
+  }
+
+  async function disconnectTikTok() {
+    if (!confirm('Disconnect your TikTok account? This removes the saved session.')) return;
+    const res  = await fetch('/publisher/session/' + TIKTOK_USER_ID, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      setTikTokUI(false, null);
+    } else {
+      alert(data.message || 'Could not disconnect.');
+    }
+  }
+
+  function showConnectFeedback(type, msg) {
+    const el = document.getElementById('connect-feedback');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.className = 'feedback ' + type;
+    el.textContent = msg;
+    el.style.display = 'block';
   }
 
   // ── Modal helpers ─────────────────────────────────────────────────────────

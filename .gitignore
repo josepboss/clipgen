@@ -73,3 +73,6 @@ sessions/
 
 # Publisher SQLite DB
 publisher.db
+
+# Temporary files (screenshots, command queues)
+temp/

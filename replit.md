@@ -79,4 +79,63 @@ python main.py "<youtube_url>" --top 3 --output my_clips
 
 Clips saved as `output/clip_01.mp4`, `clip_02.mp4`, …
 
+---
+
+## TikTok Publisher Module
+
+Playwright-based TikTok auto-publisher with multi-user session isolation.
+
+### Structure
+
+| Path | Purpose |
+|------|---------|
+| `src/publisher/browser.js` | Playwright Chromium factory; loads/saves user sessions |
+| `src/publisher/platforms/tiktok.js` | TikTok upload automation (video + caption + public) |
+| `src/publisher/session-login.js` | One-time login script per user (HEADLESS=false) |
+| `src/publisher/scheduler.js` | Optional standalone Node.js queue processor |
+| `publisher_db.py` | SQLite queue (publisher.db) — CRUD helpers |
+| `publisher_routes.py` | Flask Blueprint for `/publisher/*` API endpoints |
+| `publisher_scheduler.py` | Python background scheduler thread |
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/publisher/session/:userId` | Check if session exists |
+| `POST` | `/publisher/login/:userId` | Trigger browser login (HEADLESS=false only) |
+| `POST` | `/publisher/queue/:userId` | Add video to publish queue |
+| `GET` | `/publisher/queue/:userId` | Get queue status |
+| `DELETE` | `/publisher/queue/:userId/:itemId` | Remove a queue item |
+| `POST` | `/publisher/publish/:userId` | Manually trigger next publish |
+
+### Session Setup (per user)
+
+```bash
+# On a machine with a display (not headless):
+HEADLESS=false node src/publisher/session-login.js <userId>
+# Log in when Chrome opens → session saved to sessions/<userId>/tiktok.json
+# Copy that JSON file to the server's sessions/ directory
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PUBLISH_INTERVAL_MINUTES` | `30` | How often scheduler polls queue |
+| `SESSION_DIR` | `./sessions` | Path to user session storage |
+| `HEADLESS` | `true` | Set `false` for login debugging |
+| `LOGIN_TIMEOUT_SEC` | `120` | How long to wait for manual login |
+
+### Queue Item Statuses
+
+`pending` → `running` → `done` / `failed` / `session_expired`
+
+When `session_expired`, the user must re-run `session-login.js` to refresh.
+
+### Security Notes
+
+- Sessions stored at `sessions/{userId}/tiktok.json` — **never committed** (gitignored)
+- No passwords stored anywhere — only browser storage state (cookies + localStorage)
+- Each user's session is fully isolated
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

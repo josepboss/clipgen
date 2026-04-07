@@ -67,3 +67,9 @@ pip-delete-this-directory.txt
 output/
 downloads/
 temp_clips/
+
+# TikTok publisher — user sessions (never commit!)
+sessions/
+
+# Publisher SQLite DB
+publisher.db

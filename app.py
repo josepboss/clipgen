@@ -7,13 +7,21 @@ from utils import validate_youtube_url, logger
 from processor import run_pipeline
 from config_manager import load_config, save_config, is_configured, mask_api_key
 from postiz_client import schedule_post
+from publisher_db import init_db
+from publisher_routes import publisher_bp
+import publisher_scheduler
 
 load_dotenv()
 
 app = Flask(__name__)
+app.register_blueprint(publisher_bp)
 
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Initialise publisher DB and start background scheduler
+init_db()
+publisher_scheduler.start()
 
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()

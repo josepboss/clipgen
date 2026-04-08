@@ -514,87 +514,93 @@
       margin-top: 10px;
     }
 
-    /* ── TikTok Connect Modal ── */
-    #connect-modal .modal {
-      max-width: 640px;
-      width: 100%;
-    }
-    .connect-status-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.85rem;
-      font-weight: 600;
+    /* ── Buffer Publishing card ── */
+    .buffer-card h3 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
       margin-bottom: 14px;
     }
-    .connect-status-bar.success { color: var(--success); }
-    .connect-status-bar.error   { color: var(--error); }
-    .connect-status-bar.waiting { color: var(--warning); }
-    .connect-status-bar.opening { color: var(--muted); }
-
-    /* Screenshot viewer */
-    .screenshot-wrap {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 16 / 10;
-      background: #000;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      cursor: crosshair;
-      margin-bottom: 12px;
-    }
-    .screenshot-wrap img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      user-select: none;
-      pointer-events: none;
-    }
-    .screenshot-placeholder {
-      position: absolute;
-      inset: 0;
+    .buffer-key-row {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      font-size: 0.85rem;
       gap: 10px;
     }
-    .screenshot-placeholder .spinner { width: 20px; height: 20px; border-width: 3px; }
-
-    .keyboard-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .keyboard-row input {
+    .buffer-key-row input {
       flex: 1;
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 7px;
-      padding: 8px 12px;
+      padding: 10px 14px;
       color: var(--text);
       font-size: 0.88rem;
       outline: none;
       transition: border-color 0.2s;
     }
-    .keyboard-row input:focus { border-color: var(--accent); }
-    .keyboard-row input::placeholder { color: var(--muted); }
+    .buffer-key-row input:focus { border-color: var(--accent); }
+    .buffer-key-row input::placeholder { color: var(--muted); }
 
-    .connect-hint-box {
-      font-size: 0.76rem;
-      color: var(--muted);
+    .channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .channel-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
       background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 8px 12px;
-      margin-bottom: 14px;
-      line-height: 1.5;
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.15s;
     }
-    .connect-hint-box b { color: var(--text); }
+    .channel-item:hover { border-color: var(--accent); }
+    .channel-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+    .channel-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--border);
+    }
+    .channel-name    { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    .channel-service { font-size: 0.74rem; color: var(--muted); text-transform: capitalize; margin-left: auto; }
+
+    /* Publish button on clip cards */
+    .btn-buffer-publish {
+      background: #1da462;
+      border: none;
+      border-radius: 7px;
+      color: #fff;
+      font-size: 0.79rem;
+      font-weight: 700;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-buffer-publish:hover:not(:disabled) { opacity: 0.85; }
+    .btn-buffer-publish:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Publish history table */
+    .history-wrap { overflow-x: auto; margin-top: 14px; }
+    .history-wrap h4 {
+      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px;
+    }
+    .history-table { width: 100%; border-collapse: collapse; font-size: 0.81rem; }
+    .history-table th {
+      text-align: left; padding: 5px 10px;
+      color: var(--muted); font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .st-queued { color: var(--warning); }
+    .st-failed { color: var(--error); }
+    .st-done   { color: var(--success); }
   </style>
 </head>
 <body>
@@ -666,73 +672,94 @@
 
 </div>
 
-<!-- ── Connected Accounts ───────────────────────────────────────────────────── -->
-<div class="card accounts-card">
-  <h3>Connected Accounts</h3>
-  <div class="account-row">
-    <span class="platform-icon">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/>
-      </svg>
-      TikTok
-    </span>
-    <span id="tiktok-badge" class="status-badge not-connected">Not Connected</span>
-    <div class="account-actions">
-      <button id="btn-connect-tiktok" class="btn-connect" onclick="startConnectTikTok()">
+<!-- ── Buffer Publishing ──────────────────────────────────────────────────── -->
+<div class="card buffer-card">
+  <h3>Buffer Publishing</h3>
+
+  <!-- Key entry (shown when not yet connected) -->
+  <div id="buffer-key-section">
+    <div class="buffer-key-row">
+      <input type="password" id="buffer-api-key"
+             placeholder="Paste your Buffer Access Token…"
+             autocomplete="off" />
+      <button class="btn-connect" id="btn-buffer-connect" onclick="connectBuffer()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        Connect TikTok
-      </button>
-      <button id="btn-disconnect-tiktok" class="btn-disconnect" onclick="disconnectTikTok()" style="display:none">
-        Disconnect
+        Connect Buffer
       </button>
     </div>
+    <p class="connect-hint">
+      Generate a token at
+      <a href="https://buffer.com/developers/apps" target="_blank" rel="noopener"
+         style="color:var(--accent)">buffer.com/developers/apps</a>
+    </p>
   </div>
-  <p id="tiktok-connect-hint" class="connect-hint" style="display:none"></p>
+
+  <!-- Connected state -->
+  <div id="buffer-connected-section" style="display:none">
+    <div class="account-row">
+      <span class="status-badge connected">Connected</span>
+      <span id="buffer-key-hint" class="connect-hint" style="margin-left:8px"></span>
+      <div class="account-actions">
+        <button class="btn-disconnect" onclick="disconnectBuffer()">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- Channel checkboxes (populated from API) -->
+    <div id="buffer-channels" class="channel-list"></div>
+  </div>
+
+  <div id="buffer-feedback" class="feedback" style="display:none;margin-top:10px"></div>
+
+  <!-- Publish history -->
+  <div id="buffer-history-wrap" class="history-wrap" style="display:none">
+    <h4>Publish History</h4>
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Clip</th><th>Channel</th><th>Scheduled</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="buffer-history-body"></tbody>
+    </table>
+  </div>
 </div>
 
 <footer>ClipGen runs locally — your data never leaves this machine.</footer>
 
 
 <!-- ══════════════════════════════════════════════════════════════════════════
-     TikTok Connect Modal
+     Buffer Publish Modal
      ══════════════════════════════════════════════════════════════════════════ -->
-<div class="modal-backdrop" id="connect-modal" onclick="closeIfBackdrop(event,'connect-modal')">
-  <div class="modal" style="max-width:640px">
-    <button class="modal-close" onclick="cancelConnect()">&times;</button>
-    <h2>Connect TikTok Account</h2>
+<div class="modal-backdrop" id="buffer-publish-modal"
+     onclick="closeIfBackdrop(event,'buffer-publish-modal')">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('buffer-publish-modal')">&times;</button>
+    <h2 id="buffer-publish-title">Publish to Buffer</h2>
 
-    <div id="connect-status-bar" class="connect-status-bar opening">
-      <div class="spinner" id="connect-spinner"></div>
-      <span id="connect-status-msg">Opening browser…</span>
+    <input type="hidden" id="buffer-publish-clip" />
+
+    <div class="form-group">
+      <label>Caption</label>
+      <textarea id="buffer-publish-caption" placeholder="Write a caption for this clip…"></textarea>
     </div>
 
-    <!-- Live screenshot viewer -->
-    <div class="screenshot-wrap" id="screenshot-wrap" onclick="handleScreenshotClick(event)">
-      <img id="browser-screenshot" alt="TikTok login browser" style="display:none" />
-      <div class="screenshot-placeholder" id="screenshot-placeholder">
-        <div class="spinner"></div>
-        <span>Loading browser…</span>
-      </div>
+    <div class="form-group">
+      <label>Channels</label>
+      <div id="buffer-modal-channels" class="channel-list"></div>
     </div>
 
-    <div class="connect-hint-box">
-      <b>How to log in:</b> Click anywhere in the browser view to interact. Use the keyboard field below to type. Press Enter to confirm.
+    <div class="form-group">
+      <label>Schedule <span style="font-weight:400;text-transform:none">(optional — leave blank to add to queue)</span></label>
+      <input type="datetime-local" id="buffer-publish-time" />
     </div>
 
-    <!-- Keyboard relay -->
-    <div class="keyboard-row">
-      <input id="keyboard-capture"
-             placeholder="Click here then type to send keystrokes to browser…"
-             autocomplete="off"
-             spellcheck="false"
-             oninput="sendTyping(this)"
-             onkeydown="sendKey(event)" />
-    </div>
-
-    <div id="connect-feedback" class="feedback" style="display:none"></div>
+    <div id="buffer-publish-feedback" class="feedback" style="display:none"></div>
 
     <div class="modal-actions">
-      <button class="btn-outline" onclick="cancelConnect()">Cancel</button>
+      <button class="btn-outline" onclick="closeModal('buffer-publish-modal')">Cancel</button>
+      <button class="btn-primary" id="buffer-publish-btn" onclick="submitBufferPublish()">
+        Publish
+      </button>
     </div>
   </div>
 </div>
@@ -813,20 +840,20 @@
   let currentJobId = null;
   let postizConfigured = false;
 
-  // ── TikTok connect state ───────────────────────────────────────────────────
-  const TIKTOK_USER_ID = 'default';
-  let connectSSE = null;
-  let screenshotPollTimer = null;
-  let connectActive = false;
+  // ── Buffer state ───────────────────────────────────────────────────────────
+  let bufferChannels = [];   // fetched from /buffer/channels after connect
 
   // ── Boot ──────────────────────────────────────────────────────────────────
 
   (async function boot() {
-    await Promise.all([fetchPostizStatus(), refreshTikTokStatus()]);
+    await Promise.all([fetchPostizStatus(), refreshBufferStatus()]);
     // Set default scheduled time to +1 hour
     const dt = new Date(Date.now() + 3600_000);
     dt.setSeconds(0, 0);
     document.getElementById('schedule-time').value =
+      dt.toISOString().slice(0, 16);
+    // Set default publish time to +1 hour too
+    document.getElementById('buffer-publish-time').value =
       dt.toISOString().slice(0, 16);
   })();
 
@@ -933,6 +960,9 @@
       card.className = 'clip-card';
 
       const scheduleDisabled = !postizConfigured ? 'disabled title="Configure Postiz in Settings"' : '';
+      const bufferDisabled   = bufferChannels.length === 0
+        ? 'disabled title="Connect Buffer first"' : '';
+      const safeName = name.replace(/'/g, "\\'");
       card.innerHTML = `
         <video controls playsinline preload="metadata">
           <source src="/output/${encodeURIComponent(name)}" type="video/mp4" />
@@ -944,8 +974,12 @@
               &#8595; Download
             </a>
             <button class="btn-schedule" ${scheduleDisabled}
-              onclick="openSchedule('${name}')">
+              onclick="openSchedule('${safeName}')">
               &#128198; Schedule
+            </button>
+            <button class="btn-buffer-publish" ${bufferDisabled}
+              onclick="openBufferPublish('${safeName}')">
+              &#128640; Publish
             </button>
           </div>
         </div>`;
@@ -1083,193 +1117,210 @@
     }
   }
 
-  // ── TikTok Connection ─────────────────────────────────────────────────────
+  // ── Buffer integration ────────────────────────────────────────────────────
 
-  async function refreshTikTokStatus() {
+  async function refreshBufferStatus() {
     try {
-      const res  = await fetch('/publisher/session/' + TIKTOK_USER_ID);
+      const res  = await fetch('/buffer/key');
       const data = await res.json();
-      setTikTokUI(data.connected, data.sessionSaved);
-    } catch (_) {}
-  }
-
-  function setTikTokUI(connected, savedAt) {
-    const badge       = document.getElementById('tiktok-badge');
-    const btnConnect  = document.getElementById('btn-connect-tiktok');
-    const btnDisc     = document.getElementById('btn-disconnect-tiktok');
-    const hint        = document.getElementById('tiktok-connect-hint');
-
-    if (connected) {
-      badge.textContent = 'Connected';
-      badge.className   = 'status-badge connected';
-      btnConnect.style.display  = 'none';
-      btnDisc.style.display     = '';
-      if (savedAt) {
-        hint.textContent = 'Session saved: ' + new Date(savedAt).toLocaleString();
-        hint.style.display = '';
-      }
-    } else {
-      badge.textContent = 'Not Connected';
-      badge.className   = 'status-badge not-connected';
-      btnConnect.style.display  = '';
-      btnDisc.style.display     = 'none';
-      hint.style.display = 'none';
-    }
-  }
-
-  async function startConnectTikTok() {
-    if (connectActive) return;
-    connectActive = true;
-
-    // Reset modal state
-    setConnectStatusUI('opening', 'Opening browser…');
-    document.getElementById('browser-screenshot').style.display = 'none';
-    document.getElementById('screenshot-placeholder').style.display = 'flex';
-    showConnectFeedback('', '');
-    openModal('connect-modal');
-
-    // Open SSE connection — this starts the browser on the server
-    connectSSE = new EventSource('/publisher/connect/' + TIKTOK_USER_ID);
-
-    connectSSE.onmessage = (e) => {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (_) { return; }
-
-      setConnectStatusUI(ev.status, ev.message || '');
-
-      if (ev.status === 'waiting') {
-        // Browser is open — start polling for screenshots
-        startScreenshotPoll();
-      } else if (ev.status === 'success') {
-        stopScreenshotPoll();
-        connectSSE.close();
-        connectSSE    = null;
-        connectActive = false;
-        setConnectStatusUI('success', ev.message || 'Session saved!');
-        // Refresh screenshot one last time
-        pollScreenshot();
-        // Show success then auto-close
-        showConnectFeedback('success', 'TikTok account connected successfully!');
-        setTimeout(async () => {
-          closeModal('connect-modal');
-          await refreshTikTokStatus();
-        }, 2000);
-      } else if (ev.status === 'error') {
-        stopScreenshotPoll();
-        connectSSE.close();
-        connectSSE    = null;
-        connectActive = false;
-        showConnectFeedback('error', ev.message || 'An error occurred.');
-      }
-    };
-
-    connectSSE.onerror = () => {
-      if (!connectActive) return;
-      stopScreenshotPoll();
-      connectActive = false;
-      setConnectStatusUI('error', 'Connection lost — please try again.');
-      showConnectFeedback('error', 'Server connection dropped.');
-    };
-  }
-
-  function setConnectStatusUI(status, msg) {
-    const bar     = document.getElementById('connect-status-bar');
-    const msgEl   = document.getElementById('connect-status-msg');
-    const spinner = document.getElementById('connect-spinner');
-    bar.className = 'connect-status-bar ' + status;
-    msgEl.textContent = msg;
-    spinner.style.display = (status === 'opening' || status === 'waiting') ? '' : 'none';
-  }
-
-  function startScreenshotPoll() {
-    if (screenshotPollTimer) return;
-    pollScreenshot(); // immediate first hit
-    screenshotPollTimer = setInterval(pollScreenshot, 2000);
-  }
-
-  function stopScreenshotPoll() {
-    if (screenshotPollTimer) {
-      clearInterval(screenshotPollTimer);
-      screenshotPollTimer = null;
-    }
-  }
-
-  async function pollScreenshot() {
-    try {
-      const res  = await fetch('/publisher/connect/status/' + TIKTOK_USER_ID);
-      const data = await res.json();
-      if (data.screenshot) {
-        const img = document.getElementById('browser-screenshot');
-        img.src = 'data:image/jpeg;base64,' + data.screenshot;
-        img.style.display = 'block';
-        document.getElementById('screenshot-placeholder').style.display = 'none';
+      if (data.configured) {
+        // Show connected state + load channels
+        document.getElementById('buffer-key-section').style.display    = 'none';
+        document.getElementById('buffer-connected-section').style.display = '';
+        document.getElementById('buffer-key-hint').textContent = data.key_hint || '';
+        await loadBufferChannels();
+        await loadBufferHistory();
       }
     } catch (_) {}
   }
 
-  function handleScreenshotClick(e) {
-    if (!connectActive) return;
-    const wrap = document.getElementById('screenshot-wrap');
-    const rect = wrap.getBoundingClientRect();
-    // Browser viewport is 1280×800; map click onto that space
-    const scaleX = 1280 / rect.width;
-    const scaleY = 800  / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top)  * scaleY);
-    relayInput([{ type: 'click', x, y }]);
-    // Focus keyboard capture after click
-    document.getElementById('keyboard-capture').focus();
-  }
+  async function connectBuffer() {
+    const key = document.getElementById('buffer-api-key').value.trim();
+    if (!key) { showBufferFeedback('error', 'Please paste your Buffer access token.'); return; }
 
-  function sendTyping(input) {
-    const text = input.value;
-    input.value = '';
-    if (text && connectActive) relayInput([{ type: 'type', text }]);
-  }
+    const btn = document.getElementById('btn-buffer-connect');
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    showBufferFeedback('', '');
 
-  function sendKey(e) {
-    const special = ['Enter','Backspace','Tab','Escape','ArrowUp','ArrowDown',
-                     'ArrowLeft','ArrowRight','Delete','Home','End'];
-    if (special.includes(e.key) && connectActive) {
-      e.preventDefault();
-      relayInput([{ type: 'key', key: e.key }]);
-    }
-  }
-
-  async function relayInput(commands) {
     try {
-      await fetch('/publisher/connect/' + TIKTOK_USER_ID + '/input', {
+      const res  = await fetch('/buffer/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commands }),
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ api_key: key }),
       });
-    } catch (_) {}
-  }
+      const data = await res.json();
 
-  async function cancelConnect() {
-    stopScreenshotPoll();
-    if (connectSSE) { connectSSE.close(); connectSSE = null; }
-    connectActive = false;
-    closeModal('connect-modal');
-  }
-
-  async function disconnectTikTok() {
-    if (!confirm('Disconnect your TikTok account? This removes the saved session.')) return;
-    const res  = await fetch('/publisher/session/' + TIKTOK_USER_ID, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.ok) {
-      setTikTokUI(false, null);
-    } else {
-      alert(data.message || 'Could not disconnect.');
+      if (data.valid) {
+        bufferChannels = data.channels || [];
+        document.getElementById('buffer-key-section').style.display    = 'none';
+        document.getElementById('buffer-connected-section').style.display = '';
+        renderChannelList('buffer-channels', bufferChannels, true);
+        await loadBufferHistory();
+        showBufferFeedback('success', `Connected — ${bufferChannels.length} channel(s) found.`);
+      } else {
+        showBufferFeedback('error', data.error || 'Invalid API key — please check and try again.');
+      }
+    } catch (e) {
+      showBufferFeedback('error', 'Network error — could not reach Buffer API.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Connect Buffer`;
     }
   }
 
-  function showConnectFeedback(type, msg) {
-    const el = document.getElementById('connect-feedback');
+  async function loadBufferChannels() {
+    try {
+      const res  = await fetch('/buffer/channels');
+      const data = await res.json();
+      bufferChannels = data.channels || [];
+      renderChannelList('buffer-channels', bufferChannels, true);
+    } catch (_) {}
+  }
+
+  function renderChannelList(containerId, channels, checkAll) {
+    const el = document.getElementById(containerId);
+    if (!channels.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:0.83rem;margin-top:8px">No channels found in your Buffer account.</p>';
+      return;
+    }
+    el.innerHTML = channels.map(ch => `
+      <label class="channel-item">
+        <input type="checkbox" name="buffer-ch" value="${ch.id}" ${checkAll ? 'checked' : ''} />
+        ${ch.avatar
+          ? `<img class="channel-avatar" src="${ch.avatar}" alt="" />`
+          : `<span class="channel-avatar"></span>`}
+        <span class="channel-name">${ch.name || ch.serviceId || ch.id}</span>
+        <span class="channel-service">${ch.service || ''}</span>
+      </label>
+    `).join('');
+  }
+
+  function getCheckedChannels(containerId) {
+    return [...document.querySelectorAll(`#${containerId} input[name="buffer-ch"]:checked`)]
+      .map(cb => cb.value);
+  }
+
+  async function disconnectBuffer() {
+    if (!confirm('Disconnect Buffer? Your stored token will be removed.')) return;
+    await fetch('/buffer/key', { method: 'DELETE' });
+    bufferChannels = [];
+    document.getElementById('buffer-connected-section').style.display = 'none';
+    document.getElementById('buffer-key-section').style.display       = '';
+    document.getElementById('buffer-channels').innerHTML               = '';
+    document.getElementById('buffer-history-wrap').style.display      = 'none';
+    showBufferFeedback('', '');
+    // Disable publish buttons in clip cards
+    document.querySelectorAll('.btn-buffer-publish').forEach(b => {
+      b.disabled = true;
+      b.title    = 'Connect Buffer first';
+    });
+  }
+
+  function showBufferFeedback(type, msg) {
+    const el = document.getElementById('buffer-feedback');
     if (!msg) { el.style.display = 'none'; return; }
-    el.className = 'feedback ' + type;
+    el.className = 'feedback' + (type ? ' ' + type : '');
     el.textContent = msg;
     el.style.display = 'block';
+  }
+
+  async function loadBufferHistory() {
+    try {
+      const res  = await fetch('/buffer/history');
+      const data = await res.json();
+      const rows = data.history || [];
+      const tbody = document.getElementById('buffer-history-body');
+      const wrap  = document.getElementById('buffer-history-wrap');
+      if (!rows.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      tbody.innerHTML = rows.map(r => {
+        const cls  = r.status === 'queued' ? 'st-queued'
+                   : r.status === 'failed' ? 'st-failed' : 'st-done';
+        const when = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
+        return `<tr>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${r.clip}">${r.clip}</td>
+          <td style="font-size:0.75rem;color:var(--muted)">${r.channel_id}</td>
+          <td>${when}</td>
+          <td class="${cls}">${r.status}</td>
+        </tr>`;
+      }).join('');
+    } catch (_) {}
+  }
+
+  // ── Buffer publish modal ──────────────────────────────────────────────────
+
+  function openBufferPublish(filename) {
+    if (!bufferChannels.length) {
+      showBufferFeedback('error', 'Connect Buffer first to publish clips.');
+      return;
+    }
+    document.getElementById('buffer-publish-clip').value = filename;
+    document.getElementById('buffer-publish-title').textContent = `Publish: ${filename}`;
+    document.getElementById('buffer-publish-caption').value = '';
+    showFeedback('buffer-publish-feedback', '', '');
+    document.getElementById('buffer-publish-btn').disabled = false;
+
+    // Render channel list in modal (none pre-checked — user chooses)
+    renderChannelList('buffer-modal-channels', bufferChannels, false);
+
+    // Default schedule time +1 hour
+    const dt = new Date(Date.now() + 3600_000);
+    dt.setSeconds(0, 0);
+    document.getElementById('buffer-publish-time').value = dt.toISOString().slice(0, 16);
+
+    openModal('buffer-publish-modal');
+  }
+
+  async function submitBufferPublish() {
+    const clip      = document.getElementById('buffer-publish-clip').value;
+    const caption   = document.getElementById('buffer-publish-caption').value.trim();
+    const timeVal   = document.getElementById('buffer-publish-time').value;
+    const channelIds = getCheckedChannels('buffer-modal-channels');
+
+    if (!caption)       { showFeedback('buffer-publish-feedback', 'error', 'Caption is required.'); return; }
+    if (!channelIds.length) { showFeedback('buffer-publish-feedback', 'error', 'Select at least one channel.'); return; }
+
+    // Convert local datetime to UTC ISO string (or null to add to queue)
+    let due_at = null;
+    if (timeVal) {
+      try { due_at = new Date(timeVal).toISOString(); } catch (_) {}
+    }
+
+    const btn = document.getElementById('buffer-publish-btn');
+    btn.disabled = true;
+    showFeedback('buffer-publish-feedback', '', due_at ? 'Scheduling…' : 'Adding to queue…');
+
+    try {
+      const res  = await fetch('/buffer/publish', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ clip_filename: clip, caption, channel_ids: channelIds, due_at }),
+      });
+      const data = await res.json();
+      const results = data.results || [];
+      const failed  = results.filter(r => !r.ok);
+      const success = results.filter(r => r.ok);
+
+      if (failed.length === 0) {
+        showFeedback('buffer-publish-feedback', 'success',
+          `Queued in Buffer on ${success.length} channel(s)!`);
+        setTimeout(async () => {
+          closeModal('buffer-publish-modal');
+          await loadBufferHistory();
+          showBufferFeedback('success', `"${clip}" queued in Buffer.`);
+        }, 1800);
+      } else {
+        const errs = failed.map(r => `${r.channel_id}: ${r.error}`).join('\n');
+        showFeedback('buffer-publish-feedback', 'error',
+          `${success.length} succeeded, ${failed.length} failed:\n${errs}`);
+        btn.disabled = false;
+      }
+    } catch (e) {
+      showFeedback('buffer-publish-feedback', 'error', 'Network error.');
+      btn.disabled = false;
+    }
   }
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
@@ -1296,6 +1347,7 @@
     if (e.key === 'Escape') {
       closeModal('settings-modal');
       closeModal('schedule-modal');
+      closeModal('buffer-publish-modal');
     }
   });
 </script>

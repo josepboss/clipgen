@@ -12,6 +12,7 @@ Endpoints:
 
 import os
 from flask import Blueprint, jsonify, request
+from flask_login import login_required, current_user
 from utils import logger
 from buffer_client import get_channels, create_post, get_posts
 from publisher_db import (
@@ -24,16 +25,20 @@ from publisher_db import (
 
 buffer_bp = Blueprint("buffer", __name__, url_prefix="/buffer")
 
-OUTPUT_DIR      = "output"
-BUFFER_USER_ID  = "default"     # single-user app; extend if auth is added
+OUTPUT_DIR = "output"
 
 
-# ── API key management ────────────────────────────────────────────────────────
+def _user_id() -> str:
+    return current_user.id
+
+
+# ── API key management ─────────────────────────────────────────────────────────
 
 @buffer_bp.route("/key", methods=["GET"])
+@login_required
 def get_key():
     """Return whether a Buffer API key is stored (shows masked version)."""
-    key = get_buffer_key(BUFFER_USER_ID)
+    key = get_buffer_key(_user_id())
     if key:
         masked = key[:6] + "…" + key[-4:] if len(key) > 10 else "***"
         return jsonify({"configured": True, "key_hint": masked})
@@ -41,15 +46,17 @@ def get_key():
 
 
 @buffer_bp.route("/key", methods=["DELETE"])
+@login_required
 def remove_key():
     """Remove the stored Buffer API key (disconnects Buffer)."""
-    delete_buffer_key(BUFFER_USER_ID)
+    delete_buffer_key(_user_id())
     return jsonify({"ok": True})
 
 
-# ── Validate + connect ────────────────────────────────────────────────────────
+# ── Validate + connect ─────────────────────────────────────────────────────────
 
 @buffer_bp.route("/validate", methods=["POST"])
+@login_required
 def validate():
     """Validate an API key by fetching channels, then store it.
 
@@ -62,25 +69,23 @@ def validate():
         return jsonify({"error": "api_key is required"}), 400
     try:
         channels = get_channels(api_key)
-        save_buffer_key(BUFFER_USER_ID, api_key)
-        logger.info(f"[buffer] API key validated — {len(channels)} channel(s)")
+        save_buffer_key(_user_id(), api_key)
+        logger.info(f"[buffer] user={_user_id()} API key validated — {len(channels)} channel(s)")
         return jsonify({"valid": True, "channels": channels})
     except Exception as exc:
-        logger.warning(f"[buffer] Validation failed: {exc}")
+        logger.warning(f"[buffer] user={_user_id()} validation failed: {exc}")
         return jsonify({"valid": False, "error": str(exc)}), 502
 
 
-# ── Channels ──────────────────────────────────────────────────────────────────
+# ── Channels ───────────────────────────────────────────────────────────────────
 
 @buffer_bp.route("/channels", methods=["GET"])
+@login_required
 def channels():
-    """List all connected channels for the stored (or provided) API key.
-
-    Query param: api_key (optional — falls back to stored key)
-    """
+    """List all connected channels for the stored (or provided) API key."""
     api_key = (request.args.get("api_key") or "").strip()
     if not api_key:
-        api_key = get_buffer_key(BUFFER_USER_ID) or ""
+        api_key = get_buffer_key(_user_id()) or ""
     if not api_key:
         return jsonify({"error": "No Buffer API key configured. Please connect Buffer first."}), 401
     try:
@@ -90,9 +95,10 @@ def channels():
         return jsonify({"error": str(exc)}), 502
 
 
-# ── Publish ───────────────────────────────────────────────────────────────────
+# ── Publish ────────────────────────────────────────────────────────────────────
 
 @buffer_bp.route("/publish", methods=["POST"])
+@login_required
 def publish():
     """Upload a clip to Buffer and create posts on one or more channels.
 
@@ -104,12 +110,10 @@ def publish():
         "caption":       "Check this out!",
         "due_at":        "2025-04-08T18:00:00Z"   (optional)
       }
-
-    Returns:
-      { "results": [{ "channel_id", "post_id", "scheduled_at", "ok" }, ...] }
     """
+    uid          = _user_id()
     data         = request.get_json(silent=True) or {}
-    api_key      = (data.get("api_key") or "").strip() or get_buffer_key(BUFFER_USER_ID) or ""
+    api_key      = (data.get("api_key") or "").strip() or get_buffer_key(uid) or ""
     channel_ids  = data.get("channel_ids") or []
     clip_filename = (data.get("clip_filename") or "").strip()
     caption      = (data.get("caption") or "").strip()
@@ -124,7 +128,9 @@ def publish():
     if not caption:
         return jsonify({"error": "caption is required."}), 400
 
-    video_path = os.path.join(OUTPUT_DIR, os.path.basename(clip_filename))
+    # Per-user clip directory
+    user_output = os.path.join(OUTPUT_DIR, uid)
+    video_path  = os.path.join(user_output, os.path.basename(clip_filename))
     if not os.path.exists(video_path):
         return jsonify({"error": f"Clip not found: {clip_filename}"}), 404
 
@@ -132,7 +138,7 @@ def publish():
     for ch_id in channel_ids:
         try:
             post = create_post(api_key, ch_id, caption, video_path, due_at)
-            log_publish(BUFFER_USER_ID, clip_filename, ch_id, post.get("post_id"), "queued")
+            log_publish(uid, clip_filename, ch_id, post.get("post_id"), "queued")
             results.append({
                 "channel_id":   ch_id,
                 "post_id":      post.get("post_id"),
@@ -140,22 +146,21 @@ def publish():
                 "ok":           True,
             })
         except Exception as exc:
-            logger.error(f"[buffer] Publish to {ch_id} failed: {exc}")
-            log_publish(BUFFER_USER_ID, clip_filename, ch_id, None, "failed", str(exc))
+            logger.error(f"[buffer] user={uid} publish to {ch_id} failed: {exc}")
+            log_publish(uid, clip_filename, ch_id, None, "failed", str(exc))
             results.append({"channel_id": ch_id, "ok": False, "error": str(exc)})
 
     return jsonify({"results": results})
 
 
-# ── Posts ─────────────────────────────────────────────────────────────────────
+# ── Posts ──────────────────────────────────────────────────────────────────────
 
 @buffer_bp.route("/posts", methods=["GET"])
+@login_required
 def posts():
-    """Return recent posts from Buffer.
-
-    Query params: api_key (optional), channel_id (optional)
-    """
-    api_key    = (request.args.get("api_key") or "").strip() or get_buffer_key(BUFFER_USER_ID) or ""
+    """Return recent posts from Buffer."""
+    uid        = _user_id()
+    api_key    = (request.args.get("api_key") or "").strip() or get_buffer_key(uid) or ""
     channel_id = (request.args.get("channel_id") or "").strip() or None
     if not api_key:
         return jsonify({"error": "No Buffer API key configured."}), 401
@@ -166,10 +171,11 @@ def posts():
         return jsonify({"error": str(exc)}), 502
 
 
-# ── History ───────────────────────────────────────────────────────────────────
+# ── History ────────────────────────────────────────────────────────────────────
 
 @buffer_bp.route("/history", methods=["GET"])
+@login_required
 def history():
     """Return local publish history (clips sent to Buffer from this app)."""
-    rows = get_publish_history(BUFFER_USER_ID)
+    rows = get_publish_history(_user_id())
     return jsonify({"history": rows})

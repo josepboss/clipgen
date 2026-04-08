@@ -1,8 +1,9 @@
 """
-publisher_db.py — SQLite storage for the publish queue and Buffer integration.
+publisher_db.py — SQLite storage for users, publish queue, and Buffer integration.
 
 Tables:
-  publish_queue   — legacy queue (kept for any existing data; not actively used)
+  users           — registered accounts (username + password hash)
+  publish_queue   — legacy queue (kept for schema compatibility)
   buffer_keys     — one row per user_id; stores the Buffer API access token
   publish_log     — record of every clip published (or attempted) via Buffer
 """
@@ -29,7 +30,19 @@ def _conn() -> sqlite3.Connection:
 def init_db() -> None:
     """Create all tables if they don't already exist."""
     with _conn() as c:
-        # Legacy queue (kept for schema compatibility)
+        # ── Users ──────────────────────────────────────────────────────────────
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                email         TEXT    UNIQUE,
+                password_hash TEXT    NOT NULL,
+                created_at    TEXT    NOT NULL
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+
+        # ── Legacy queue (kept for schema compatibility) ────────────────────────
         c.execute("""
             CREATE TABLE IF NOT EXISTS publish_queue (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +60,7 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_queue_user   ON publish_queue(user_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON publish_queue(status)")
 
-        # Buffer API key store (one row per user)
+        # ── Buffer API key store (one row per user) ────────────────────────────
         c.execute("""
             CREATE TABLE IF NOT EXISTS buffer_keys (
                 user_id    TEXT PRIMARY KEY,
@@ -57,7 +70,7 @@ def init_db() -> None:
             )
         """)
 
-        # Publish log (one row per channel per clip)
+        # ── Publish log (one row per channel per clip) ─────────────────────────
         c.execute("""
             CREATE TABLE IF NOT EXISTS publish_log (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +87,45 @@ def init_db() -> None:
         c.commit()
 
 
-# ── Buffer key ────────────────────────────────────────────────────────────────
+# ── User accounts ──────────────────────────────────────────────────────────────
+
+def create_user(username: str, email: str | None, password_hash: str) -> dict:
+    """Insert a new user. Returns the created row dict.
+    Raises sqlite3.IntegrityError if username or email already exists."""
+    now = _now()
+    with _conn() as c:
+        cur = c.execute(
+            """
+            INSERT INTO users (username, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (username, email or None, password_hash, now),
+        )
+        c.commit()
+        row = c.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    with _conn() as c:
+        row = c.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_username(username: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_count() -> int:
+    with _conn() as c:
+        return c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+# ── Buffer key ─────────────────────────────────────────────────────────────────
 
 def save_buffer_key(user_id: str, api_key: str) -> None:
     """Insert or replace the Buffer API key for a user."""
@@ -105,7 +156,7 @@ def delete_buffer_key(user_id: str) -> bool:
     return cur.rowcount > 0
 
 
-# ── Publish log ───────────────────────────────────────────────────────────────
+# ── Publish log ────────────────────────────────────────────────────────────────
 
 def log_publish(
     user_id: str,
@@ -148,7 +199,7 @@ def get_publish_history(user_id: str, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ── Legacy queue API (kept for backward compat) ───────────────────────────────
+# ── Legacy queue API (kept for backward compat) ────────────────────────────────
 
 def enqueue(
     user_id: str,

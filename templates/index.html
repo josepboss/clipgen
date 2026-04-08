@@ -356,7 +356,7 @@
     }
     .btn-reset:hover { border-color: var(--accent); color: var(--text); }
 
-    footer { margin-top: 44px; font-size: 0.76rem; color: var(--muted); text-align: center; }
+    footer { margin-top: 60px; font-size: 0.76rem; color: var(--muted); text-align: center; }
 
     /* ── Modals ── */
     .modal-backdrop {
@@ -636,6 +636,99 @@
     .st-queued { color: var(--warning); }
     .st-failed { color: var(--error); }
     .st-done   { color: var(--success); }
+
+    /* ── Recent Clips history section ── */
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-heading h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .storage-badge {
+      font-size: 0.74rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      white-space: nowrap;
+    }
+    .refresh-hint {
+      font-size: 0.74rem;
+      color: var(--muted);
+      margin-left: 10px;
+    }
+
+    .recent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .recent-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .recent-card video {
+      width: 100%;
+      aspect-ratio: 9/16;
+      object-fit: cover;
+      background: #000;
+      display: block;
+    }
+    .recent-card-body {
+      padding: 10px 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .recent-name {
+      font-size: 0.76rem;
+      font-weight: 600;
+      font-family: monospace;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .recent-meta {
+      font-size: 0.71rem;
+      color: var(--muted);
+    }
+    .recent-actions {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: auto;
+    }
+    .btn-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .btn-sm:hover:not(:disabled) { opacity: 0.8; }
+    .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-sm-dl      { background: var(--surface3); color: var(--text); border: 1px solid var(--border); }
+    .btn-sm-buf     { background: #1da462; color: #fff; }
+    .btn-sm-del     { background: rgba(239,68,68,0.12); color: var(--error); border: 1px solid rgba(239,68,68,0.3); }
+    .recent-empty   { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 24px 0; }
   </style>
 </head>
 <body>
@@ -782,6 +875,20 @@
       </thead>
       <tbody id="buffer-history-body"></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ── Recent Clips ───────────────────────────────────────────────────────── -->
+<div class="card" id="recent-section" style="margin-top:24px;">
+  <div class="section-heading">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h2>Recent Clips</h2>
+      <span class="refresh-hint" id="recent-refresh-hint">auto-refreshes every 60s</span>
+    </div>
+    <span class="storage-badge" id="storage-badge">Loading…</span>
+  </div>
+  <div class="recent-grid" id="recent-grid">
+    <p class="recent-empty">Loading clips…</p>
   </div>
 </div>
 
@@ -1411,6 +1518,102 @@
       closeModal('buffer-publish-modal');
     }
   });
+
+  // ── Recent Clips history ───────────────────────────────────────────────────
+
+  let recentRefreshTimer = null;
+
+  async function loadRecentClips() {
+    try {
+      const [histRes, storRes] = await Promise.all([
+        fetch('/history'),
+        fetch('/storage'),
+      ]);
+      const histData = await histRes.json();
+      const storData = await storRes.json();
+
+      // Update storage badge
+      const badge = document.getElementById('storage-badge');
+      if (storData.used_mb !== undefined) {
+        badge.textContent =
+          `${storData.clip_count} clip${storData.clip_count !== 1 ? 's' : ''} · ${storData.used_mb} MB used`;
+      }
+
+      renderRecentGrid(histData.clips || []);
+    } catch (_) {}
+  }
+
+  function renderRecentGrid(clips) {
+    const grid = document.getElementById('recent-grid');
+    if (!clips.length) {
+      grid.innerHTML = '<p class="recent-empty">No clips yet — generate one above!</p>';
+      return;
+    }
+
+    grid.innerHTML = clips.map(clip => {
+      const date = clip.created_at
+        ? new Date(clip.created_at * 1000).toLocaleString(undefined, {
+            month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+          })
+        : '—';
+      const safeName = clip.filename.replace(/'/g, "\\'");
+      const bufDisabled = bufferChannels.length === 0 ? 'disabled title="Connect Buffer first"' : '';
+
+      return `
+      <div class="recent-card" id="rcard-${CSS.escape(clip.filename)}">
+        <video preload="metadata" playsinline muted
+               onclick="this.paused ? this.play() : this.pause()"
+               style="cursor:pointer">
+          <source src="${clip.url}" type="video/mp4" />
+        </video>
+        <div class="recent-card-body">
+          <div class="recent-name" title="${clip.filename}">${clip.filename}</div>
+          <div class="recent-meta">${date} &middot; ${clip.size_mb} MB</div>
+          <div class="recent-actions">
+            <a class="btn-sm btn-sm-dl" href="${clip.download}" download="${clip.filename}">&#8595; DL</a>
+            <button class="btn-sm btn-sm-buf" ${bufDisabled}
+              onclick="openBufferPublish('${safeName}')">&#128640;</button>
+            <button class="btn-sm btn-sm-del"
+              onclick="deleteRecentClip('${safeName}', this)">&#128465;</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function deleteRecentClip(filename, btn) {
+    if (!confirm(`Delete "${filename}"?`)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/output/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.deleted) {
+        // Remove card from DOM immediately
+        const card = document.getElementById(`rcard-${CSS.escape(filename)}`);
+        if (card) card.remove();
+        // Refresh storage badge
+        loadRecentClips();
+      } else {
+        alert(data.error || 'Delete failed.');
+        btn.disabled = false;
+      }
+    } catch (_) {
+      alert('Network error.');
+      btn.disabled = false;
+    }
+  }
+
+  // Initial load + auto-refresh every 60 s
+  loadRecentClips();
+  recentRefreshTimer = setInterval(loadRecentClips, 60_000);
+
+  // Also refresh after a job completes so new clips appear immediately
+  const _origShowResults = showResults;
+  showResults = function(clips) {
+    _origShowResults(clips);
+    setTimeout(loadRecentClips, 1500);
+  };
 </script>
 </body>
 </html>

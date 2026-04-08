@@ -86,6 +86,61 @@ def _dir_size_mb(path: str) -> float:
     return round(total / 1_048_576, 1)
 
 
+MAX_CLIPS_PER_USER = 30
+MIN_AGE_SECS_FOR_DELETE = 300  # 5 minutes — protect files being downloaded
+
+
+def _cleanup_clips(user_id: str) -> int:
+    """Keep the MAX_CLIPS_PER_USER most recent .mp4 files; delete the rest.
+
+    Files younger than MIN_AGE_SECS_FOR_DELETE are never deleted (safety guard
+    for in-progress downloads). Returns the number of files deleted.
+    """
+    user_dir = os.path.join(OUTPUT_DIR, str(user_id))
+    if not os.path.isdir(user_dir):
+        return 0
+
+    now = __import__("time").time()
+    mp4_files = []
+    for fname in os.listdir(user_dir):
+        if not fname.endswith(".mp4"):
+            continue
+        fpath = os.path.join(user_dir, fname)
+        try:
+            mtime = os.path.getmtime(fpath)
+            mp4_files.append((mtime, fpath))
+        except OSError:
+            pass
+
+    # Sort newest-first; keep the first MAX_CLIPS_PER_USER
+    mp4_files.sort(reverse=True)
+    to_delete = mp4_files[MAX_CLIPS_PER_USER:]
+    deleted = 0
+    for mtime, fpath in to_delete:
+        if now - mtime < MIN_AGE_SECS_FOR_DELETE:
+            continue   # too new — skip
+        try:
+            os.remove(fpath)
+            deleted += 1
+        except OSError:
+            pass
+
+    if deleted:
+        logger.info(f"[cleanup] user={user_id}: deleted {deleted} old clip(s)")
+    return deleted
+
+
+def _startup_cleanup() -> None:
+    """Run clip cleanup for every existing user directory at startup."""
+    if not os.path.isdir(OUTPUT_DIR):
+        return
+    for uid in os.listdir(OUTPUT_DIR):
+        if os.path.isdir(os.path.join(OUTPUT_DIR, uid)):
+            _cleanup_clips(uid)
+
+_startup_cleanup()
+
+
 def admin_required(f):
     """Decorator: requires login + admin status. Returns 403 otherwise."""
     @wraps(f)
@@ -113,6 +168,8 @@ def _run_job(job_id: str, url: str, top_n: int, user_id: str) -> None:
 
         clips = run_pipeline(url, output_dir=user_dir, top_n=top_n, on_status=on_status)
         filenames = [os.path.basename(c) for c in clips]
+        # Keep only the 30 most recent clips for this user
+        _cleanup_clips(user_id)
         with jobs_lock:
             jobs[job_id].update({
                 "step":   "done",
@@ -333,11 +390,22 @@ def status(job_id: str):
     })
 
 
-@app.route("/output/<filename>")
+@app.route("/output/<filename>", methods=["GET", "DELETE"])
 @login_required
 def serve_clip(filename: str):
-    user_dir = _user_output_dir(current_user.id)
-    return send_from_directory(user_dir, filename, as_attachment=False)
+    user_dir  = _user_output_dir(current_user.id)
+    safe_name = os.path.basename(filename)
+    if request.method == "DELETE":
+        fpath = os.path.join(user_dir, safe_name)
+        if not os.path.isfile(fpath):
+            return jsonify({"error": "File not found."}), 404
+        try:
+            os.remove(fpath)
+            logger.info(f"[clip] user={current_user.id} deleted {safe_name!r}")
+            return jsonify({"deleted": True})
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+    return send_from_directory(user_dir, safe_name, as_attachment=False)
 
 
 @app.route("/download/<filename>")
@@ -409,6 +477,68 @@ def set_config():
     save_config(cfg)
 
     return jsonify({"success": True, "configured": is_configured()}), 200
+
+
+# ── Clip history & storage ─────────────────────────────────────────────────────
+
+@app.route("/history")
+@login_required
+def history():
+    """Return JSON list of the most recent MAX_CLIPS_PER_USER clips for current user."""
+    import time as _time
+    user_dir = _user_output_dir(current_user.id)
+    clips = []
+    for fname in os.listdir(user_dir):
+        if not fname.endswith(".mp4"):
+            continue
+        fpath = os.path.join(user_dir, fname)
+        try:
+            stat = os.stat(fpath)
+            clips.append({
+                "filename":   fname,
+                "size_mb":    round(stat.st_size / 1_048_576, 2),
+                "created_at": stat.st_mtime,
+                "url":        f"/output/{fname}",
+                "download":   f"/download/{fname}",
+            })
+        except OSError:
+            pass
+
+    clips.sort(key=lambda c: c["created_at"], reverse=True)
+    return jsonify({"clips": clips[:MAX_CLIPS_PER_USER]})
+
+
+@app.route("/storage")
+@login_required
+def storage_info():
+    """Return storage statistics for the current user."""
+    import shutil as _shutil
+    user_dir = _user_output_dir(current_user.id)
+    clips = []
+    for fname in os.listdir(user_dir):
+        if not fname.endswith(".mp4"):
+            continue
+        fpath = os.path.join(user_dir, fname)
+        try:
+            clips.append((os.path.getmtime(fpath), fname))
+        except OSError:
+            pass
+
+    clips.sort()
+    used_mb = _dir_size_mb(user_dir)
+    try:
+        disk = _shutil.disk_usage(user_dir)
+        free_mb = round(disk.free / 1_048_576, 1)
+    except Exception:
+        free_mb = None
+
+    return jsonify({
+        "used_mb":    used_mb,
+        "free_mb":    free_mb,
+        "clip_count": len(clips),
+        "oldest_clip": clips[0][1]  if clips else None,
+        "newest_clip": clips[-1][1] if clips else None,
+    })
 
 
 # ── 403 handler ────────────────────────────────────────────────────────────────

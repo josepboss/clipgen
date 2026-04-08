@@ -12,15 +12,18 @@ TARGET_RATIO = TARGET_W / TARGET_H   # 9:16 ≈ 0.5625
 MIN_OUTPUT_BYTES = 10_000
 
 # ── Single-face tracking constants ────────────────────────────────────────────
-SAMPLE_STEP = 5       # detect face every N frames  (~6 detections/s at 30 fps)
-N_SMOOTH = 8          # moving-average window length
+SAMPLE_STEP = 3       # detect face every N frames  (~10 detections/s at 30 fps)
+N_SMOOTH = 15         # moving-average window length (longer = smoother)
 N_MISS_FALLBACK = 25  # hold last position for this many consecutive misses
 #                       then drift gradually to center
-SNAP_LIMIT = 80       # max crop-x change allowed per 0.5 s keyframe (pixels)
+SNAP_LIMIT = 60       # max crop-x change allowed per 0.5 s keyframe (pixels)
 CMD_STEP_SEC = 0.5    # interval between sendcmd keyframes
 
 # ── Speaker-detection constants ────────────────────────────────────────────────
-SPEAKER_SMOOTH_SEC = 0.5     # blend duration (sec) when switching speaker focus
+SPEAKER_SMOOTH_SEC = 1.5     # blend duration (sec) — takes ~1 s to reach target
+DEAD_ZONE_FRAC = 0.05        # don't update target if face within 5 % of frame_w
+FACE_SMOOTH_N = 5            # rolling average of last N raw face-center positions
+FACE_LOCK_SEC = 2.0          # hold on same speaker face for at least 2 seconds
 LIP_TOP_FRAC = 0.55          # mouth region top    (fraction from face-bbox top)
 LIP_BOT_FRAC = 0.92          # mouth region bottom (fraction from face-bbox top)
 AUDIO_SR = 8000              # sample rate for lightweight audio extraction
@@ -211,10 +214,12 @@ def _track_speaker_focused(
 ) -> dict[float, int]:
     """Return {timestamp_sec: crop_left_x} using speaker-focused tracking.
 
-    Single-face frames use a moving-average (identical to the old behaviour).
-    Multi-face frames use lip-activity × audio-energy scoring to select the
-    speaker, with exponential smoothing over SPEAKER_SMOOTH_SEC when focus
-    shifts from one face to another.
+    Stabilisation improvements:
+    - SPEAKER_SMOOTH_SEC=1.5 → exponential blend takes ~1 s to reach target
+    - Dead zone: target only updated when face moves > DEAD_ZONE_FRAC of frame_w
+    - Per-face rolling average of last FACE_SMOOTH_N raw centres (pre-smoothed)
+    - Speaker face lock: stays on same identity for at least FACE_LOCK_SEC
+    - Sample every SAMPLE_STEP=3 frames; positions interpolated by FFmpeg
     """
     center_cx = orig_w // 2
     max_x = max(0, orig_w - crop_w)
@@ -223,31 +228,39 @@ def _track_speaker_focused(
     if total_frames <= 0 or fps <= 0:
         return {0.0: center_crop_x}
 
-    # ── Single-face path state ─────────────────────────────────────────────
-    ma_buf: deque[int] = deque(maxlen=N_SMOOTH)
-    last_known_cx: int = center_cx
+    dt_per_sample = SAMPLE_STEP / fps
+    # Exponential blend alpha: 95 % of distance covered in SPEAKER_SMOOTH_SEC
+    blend_alpha = min(1.0, dt_per_sample / max(dt_per_sample, SPEAKER_SMOOTH_SEC))
+    dead_zone_px = orig_w * DEAD_ZONE_FRAC
+    # Minimum samples before allowing a speaker switch
+    face_lock_samples = max(1, int(FACE_LOCK_SEC / dt_per_sample))
+
+    # ── Shared smoothed-position state ────────────────────────────────────
+    current_cx = float(center_cx)   # continuously smoothed face-centre X
+    target_cx  = float(center_cx)   # where the crop is trying to go
     consec_miss: int = 0
 
-    # ── Multi-face / speaker path state ───────────────────────────────────
-    dt_per_sample = SAMPLE_STEP / fps
-    # Exponential blend alpha: at alpha=1 we'd snap instantly,
-    # at alpha≈0 we'd never arrive. Target: 95 % there in SPEAKER_SMOOTH_SEC.
-    blend_alpha = min(1.0, dt_per_sample / max(dt_per_sample, SPEAKER_SMOOTH_SEC))
+    # Moving-average buffer (single-face path)
+    ma_buf: deque[int] = deque(maxlen=N_SMOOTH)
 
-    current_cx = float(center_cx)   # continuously smoothed position
-    target_cx = float(center_cx)    # where we want to move to
-
-    # Face-identity tracking across sampled frames
+    # ── Multi-face / speaker-path state ───────────────────────────────────
     prev_face_centers: list[tuple[int, int]] = []
-    prev_track_ids: list[int] = []
-    next_track_id: int = 0
+    prev_track_ids:    list[int]             = []
+    next_track_id:     int                   = 0
 
-    # Per-identity lip-activity history
-    lip_history: dict[int, deque] = {}
-    mouth_patches: dict[int, np.ndarray] = {}   # track_id → last mouth patch
+    # Per-identity rolling centre history for pre-smoothing raw face positions
+    face_cx_history: dict[int, deque] = {}
+
+    # Per-identity lip-activity history + last mouth patch
+    lip_history:   dict[int, deque]       = {}
+    mouth_patches: dict[int, np.ndarray]  = {}
+
+    # Speaker lock
+    locked_speaker_id:        int | None = None
+    locked_samples_remaining: int        = 0
 
     n_detected = 0
-    n_sampled = 0
+    n_sampled  = 0
     positions: dict[float, int] = {}
 
     for frame_idx in range(0, total_frames, SAMPLE_STEP):
@@ -261,144 +274,183 @@ def _track_speaker_focused(
 
         # ── Detect faces ────────────────────────────────────────────────
         faces: list[tuple[int, int, int, int]] = []
-        gray: np.ndarray | None = None
+        gray:  np.ndarray | None               = None
 
         if not face_cascade.empty():
             try:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                raw = face_cascade.detectMultiScale(
-                    gray,
-                    scaleFactor=1.1,
-                    minNeighbors=3,
-                    minSize=(25, 25),
+                raw  = face_cascade.detectMultiScale(
+                    gray, scaleFactor=1.1, minNeighbors=3, minSize=(25, 25),
                 )
                 if len(raw) > 0:
                     faces = [tuple(int(v) for v in f) for f in raw]
             except Exception as exc:
                 logger.debug(f"Face detection error at frame {frame_idx}: {exc}")
 
-        # ── No faces detected ───────────────────────────────────────────
+        # ── No faces ────────────────────────────────────────────────────
         if not faces:
             consec_miss += 1
-            if consec_miss <= N_MISS_FALLBACK:
-                # Hold: keep target unchanged, let current track toward it
-                pass
-            else:
-                # Drift target gradually toward center
+            if consec_miss > N_MISS_FALLBACK:
                 progress = min(1.0, (consec_miss - N_MISS_FALLBACK) / N_MISS_FALLBACK)
                 target_cx = current_cx * (1.0 - progress) + center_cx * progress
-
             current_cx += (target_cx - current_cx) * blend_alpha
             positions[timestamp] = _clamp(int(round(current_cx)) - crop_w // 2, 0, max_x)
             continue
 
-        # ── Faces detected ──────────────────────────────────────────────
         consec_miss = 0
         n_detected += 1
 
-        # ── Single face → use original moving-average path ─────────────
+        # ── Single face → moving-average + dead-zone path ───────────────
         if len(faces) == 1:
             fx, fy, fw, fh = faces[0]
             raw_cx = _clamp(fx + fw // 2, crop_w // 2, orig_w - crop_w // 2)
-            ma_buf.append(raw_cx)
-            smoothed_cx = int(sum(ma_buf) / len(ma_buf))
-            last_known_cx = smoothed_cx
-            target_cx = float(smoothed_cx)
-            current_cx += (target_cx - current_cx) * blend_alpha
 
-            # Keep identity state in sync for the single face
-            cx_i, cy_i = fx + fw // 2, fy + fh // 2
-            prev_face_centers = [(cx_i, cy_i)]
+            # Maintain identity across single-face frames
             if prev_track_ids:
                 tid = prev_track_ids[0]
             else:
                 tid = next_track_id
                 next_track_id += 1
-            prev_track_ids = [tid]
+
+            # Rolling average of raw face-centre positions (anti-jitter)
+            if tid not in face_cx_history:
+                face_cx_history[tid] = deque(maxlen=FACE_SMOOTH_N)
+            face_cx_history[tid].append(float(raw_cx))
+            pre_smoothed_cx = int(np.mean(face_cx_history[tid]))
+
+            ma_buf.append(pre_smoothed_cx)
+            smoothed_cx = int(sum(ma_buf) / len(ma_buf))
+
+            # Dead zone: only update target if face has moved meaningfully
+            if abs(smoothed_cx - int(round(current_cx))) >= dead_zone_px:
+                target_cx = float(smoothed_cx)
+
+            current_cx += (target_cx - current_cx) * blend_alpha
+
+            # Sync identity state
+            prev_face_centers = [(fx + fw // 2, fy + fh // 2)]
+            prev_track_ids    = [tid]
             if gray is not None:
                 patch = _get_mouth_patch((fx, fy, fw, fh), gray)
                 if patch is not None:
                     mouth_patches[tid] = patch
 
-        # ── Multiple faces → speaker selection ─────────────────────────
+        # ── Multiple faces → speaker selection with lock ─────────────────
         else:
             curr_centers = [(fx + fw // 2, fy + fh // 2) for fx, fy, fw, fh in faces]
-
             curr_track_ids, next_track_id = _match_faces(
                 prev_face_centers, prev_track_ids,
                 curr_centers, orig_w, next_track_id,
             )
 
-            a_energy = float(audio_energy[min(frame_idx, len(audio_energy) - 1)])
+            a_energy  = float(audio_energy[min(frame_idx, len(audio_energy) - 1)])
             is_silent = a_energy < MIN_AUDIO_ENERGY
 
-            best_score = -1.0
-            speaker_cx: int | None = None
-            largest_cx: int | None = None
-            largest_area = 0
-
+            # Update per-face rolling histories
             for face, tid, cc in zip(faces, curr_track_ids, curr_centers):
                 fx, fy, fw, fh = face
-                face_cx = _clamp(fx + fw // 2, crop_w // 2, orig_w - crop_w // 2)
-                area = fw * fh
+                raw_face_cx = _clamp(fx + fw // 2, crop_w // 2, orig_w - crop_w // 2)
+                if tid not in face_cx_history:
+                    face_cx_history[tid] = deque(maxlen=FACE_SMOOTH_N)
+                face_cx_history[tid].append(float(raw_face_cx))
 
-                # Track largest face (fallback)
-                if area > largest_area:
-                    largest_area = area
-                    largest_cx = face_cx
-
-                # Lip-activity score
-                lip_score = 0.0
+                # Update mouth patch for lip scoring
                 if gray is not None:
                     patch = _get_mouth_patch((fx, fy, fw, fh), gray)
-                    if patch is not None and tid in mouth_patches:
-                        prev_patch = mouth_patches[tid]
-                        if prev_patch.shape == patch.shape and patch.size > 0:
-                            lip_score = float(
-                                np.mean(
-                                    np.abs(
-                                        patch.astype(np.float32)
-                                        - prev_patch.astype(np.float32)
-                                    )
-                                )
-                            ) / 255.0
-                        mouth_patches[tid] = patch
-                    elif patch is not None:
+                    if patch is not None:
                         mouth_patches[tid] = patch
 
-                # Rolling average of lip activity
-                if tid not in lip_history:
-                    lip_history[tid] = deque(maxlen=LIP_HISTORY_N)
-                lip_history[tid].append(lip_score)
-                avg_lip = float(np.mean(lip_history[tid]))
+            # Decrement face lock counter
+            if locked_samples_remaining > 0:
+                locked_samples_remaining -= 1
 
-                # Combined score: lip activity weighted by audio presence.
-                # Area term gives a small tiebreaker toward closer/larger faces.
-                area_norm = area / max(1, orig_w * orig_w // 4)
-                score = avg_lip * (0.7 + 0.3 * a_energy) + area_norm * 0.05
+            # If locked speaker is still visible, stay with them
+            locked_visible = (
+                locked_speaker_id is not None
+                and locked_speaker_id in curr_track_ids
+            )
+            new_target_tid: int | None = None
+            new_target: float = target_cx
 
-                if score > best_score:
-                    best_score = score
-                    speaker_cx = face_cx
-
-            # Fallback priority: speaking face → largest face → centre
-            if is_silent or speaker_cx is None:
-                new_target = float(largest_cx if largest_cx is not None else center_cx)
+            if locked_samples_remaining > 0 and locked_visible:
+                lock_idx  = curr_track_ids.index(locked_speaker_id)
+                lock_face = faces[lock_idx]
+                fx, fy, fw, fh = lock_face
+                hist = face_cx_history.get(locked_speaker_id)
+                smoothed_lock_cx = int(np.mean(hist)) if hist else (fx + fw // 2)
+                new_target_tid = locked_speaker_id
+                new_target     = float(smoothed_lock_cx)
             else:
-                new_target = float(speaker_cx)
+                # Score all faces and pick the speaker
+                best_score  = -1.0
+                speaker_cx: int | None  = None
+                speaker_tid: int | None = None
+                largest_cx: int | None  = None
+                largest_area = 0
 
-            target_cx = new_target
+                for face, tid, cc in zip(faces, curr_track_ids, curr_centers):
+                    fx, fy, fw, fh = face
+                    area = fw * fh
+                    hist = face_cx_history.get(tid)
+                    face_cx_val = int(np.mean(hist)) if hist else _clamp(
+                        fx + fw // 2, crop_w // 2, orig_w - crop_w // 2
+                    )
 
-            # Also keep the MA buffer fed from current target (for continuity
-            # if we later transition back to single-face path)
-            ma_buf.append(int(round(target_cx)) + crop_w // 2)
-            last_known_cx = int(round(target_cx)) + crop_w // 2
+                    if area > largest_area:
+                        largest_area = area
+                        largest_cx   = face_cx_val
+
+                    # Lip-activity score
+                    lip_score = 0.0
+                    if gray is not None and tid in mouth_patches:
+                        prev_patch = mouth_patches[tid]
+                        new_patch  = _get_mouth_patch((fx, fy, fw, fh), gray)
+                        if (new_patch is not None
+                                and prev_patch.shape == new_patch.shape
+                                and new_patch.size > 0):
+                            lip_score = float(
+                                np.mean(np.abs(
+                                    new_patch.astype(np.float32)
+                                    - prev_patch.astype(np.float32)
+                                ))
+                            ) / 255.0
+
+                    if tid not in lip_history:
+                        lip_history[tid] = deque(maxlen=LIP_HISTORY_N)
+                    lip_history[tid].append(lip_score)
+                    avg_lip = float(np.mean(lip_history[tid]))
+
+                    area_norm = area / max(1, orig_w * orig_w // 4)
+                    score = avg_lip * (0.7 + 0.3 * a_energy) + area_norm * 0.05
+
+                    if score > best_score:
+                        best_score  = score
+                        speaker_cx  = face_cx_val
+                        speaker_tid = tid
+
+                if is_silent or speaker_cx is None:
+                    new_target     = float(largest_cx if largest_cx is not None else center_cx)
+                    new_target_tid = None
+                else:
+                    new_target     = float(speaker_cx)
+                    new_target_tid = speaker_tid
+
+                # Set face lock when speaker changes
+                if new_target_tid is not None and new_target_tid != locked_speaker_id:
+                    locked_speaker_id        = new_target_tid
+                    locked_samples_remaining = face_lock_samples
+
+            # Dead zone: only move the target if speaker has shifted significantly
+            if abs(new_target - current_cx) >= dead_zone_px:
+                target_cx = new_target
 
             current_cx += (target_cx - current_cx) * blend_alpha
 
-            # Update identity state
+            # Keep MA buffer in sync for single-face continuity
+            ma_buf.append(int(round(target_cx)) + crop_w // 2)
+
             prev_face_centers = curr_centers
-            prev_track_ids = curr_track_ids
+            prev_track_ids    = curr_track_ids
 
         positions[timestamp] = _clamp(int(round(current_cx)) - crop_w // 2, 0, max_x)
 

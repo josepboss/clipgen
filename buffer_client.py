@@ -6,6 +6,7 @@ Buffer API:
   Auth             : Authorization: Bearer {api_key}
 """
 
+import json
 import os
 import requests
 from utils import logger
@@ -19,21 +20,27 @@ UPLOAD_TIMEOUT = 120
 # ── GraphQL helper ─────────────────────────────────────────────────────────────
 
 def _gql(api_key: str, query: str, variables: dict | None = None) -> dict:
-    """Execute a GraphQL query/mutation and return the ``data`` block.
+    """Execute a GraphQL query/mutation and return the full response body.
+
+    Uses data=json.dumps() (not json=) so requests does not re-encode the body.
 
     Raises:
         requests.HTTPError  — non-2xx HTTP status
         ValueError          — GraphQL ``errors`` field present
     """
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     payload: dict = {"query": query}
     if variables:
         payload["variables"] = variables
 
-    resp = requests.post(BUFFER_API_URL, json=payload, headers=headers, timeout=TIMEOUT_SEC)
+    resp = requests.post(
+        BUFFER_API_URL,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        data=json.dumps(payload),
+        timeout=TIMEOUT_SEC,
+    )
     resp.raise_for_status()
     body = resp.json()
     if "errors" in body:
@@ -47,23 +54,36 @@ def _gql(api_key: str, query: str, variables: dict | None = None) -> dict:
 def get_channels(api_key: str) -> list[dict]:
     """Return all connected social channels for this Buffer account.
 
-    Each channel dict contains: id, name, service, avatar, serviceId, timezone.
+    Queries via account → organizations → channels so the response matches
+    the nested structure the Buffer API actually returns.
+
+    Each channel dict contains at minimum: id, name, service.
     """
     query = """
-    query GetChannels {
-      channels {
-        id
-        name
-        service
-        avatar
-        serviceId
-        timezone
-        type
+    query GetOrganizations {
+      account {
+        organizations {
+          id
+          name
+          channels {
+            id
+            name
+            service
+          }
+        }
       }
     }
     """
     data = _gql(api_key, query)
-    channels = data.get("channels", [])
+
+    # Flatten channels across all organizations
+    channels: list[dict] = []
+    for org in (data.get("account") or {}).get("organizations") or []:
+        for ch in org.get("channels") or []:
+            ch.setdefault("org_id",   org.get("id"))
+            ch.setdefault("org_name", org.get("name"))
+            channels.append(ch)
+
     logger.info(f"[buffer] {len(channels)} channel(s) fetched")
     return channels
 
@@ -90,9 +110,9 @@ def create_post(
     """
     media_id = _upload_media(api_key, video_path)
 
-    is_scheduled = bool(due_at)
+    is_scheduled    = bool(due_at)
     scheduling_type = "custom" if is_scheduled else "automatic"
-    mode = "customScheduled" if is_scheduled else "addToQueue"
+    mode            = "customScheduled" if is_scheduled else "addToQueue"
 
     mutation = """
     mutation CreatePost($input: CreatePostInput!) {
@@ -108,18 +128,18 @@ def create_post(
     """
 
     inp: dict = {
-        "channelId": channel_id,
-        "text": text,
+        "channelId":      channel_id,
+        "text":           text,
         "schedulingType": scheduling_type,
-        "mode": mode,
+        "mode":           mode,
     }
     if media_id:
         inp["mediaIds"] = [media_id]
     if due_at:
         inp["dueAt"] = due_at
 
-    data = _gql(api_key, mutation, {"input": inp})
-    post = (data.get("createPost") or {}).get("post") or {}
+    data   = _gql(api_key, mutation, {"input": inp})
+    post   = (data.get("createPost") or {}).get("post") or {}
     result = {
         "post_id":      post.get("id"),
         "scheduled_at": post.get("dueAt"),
@@ -137,10 +157,7 @@ def get_posts(
     org_id: str | None = None,
     channel_id: str | None = None,
 ) -> list[dict]:
-    """Return up to 20 recent posts for this Buffer account.
-
-    Optionally filter by channel_id.
-    """
+    """Return up to 20 recent posts for this Buffer account."""
     query = """
     query GetPosts($channelId: String) {
       posts(channelId: $channelId, first: 20) {
@@ -164,7 +181,7 @@ def get_posts(
     if channel_id:
         variables["channelId"] = channel_id
 
-    data = _gql(api_key, query, variables or None)
+    data  = _gql(api_key, query, variables or None)
     edges = (data.get("posts") or {}).get("edges") or []
     return [e["node"] for e in edges if "node" in e]
 
@@ -181,17 +198,16 @@ def _upload_media(api_key: str, video_path: str) -> str | None:
         return None
 
     try:
-        headers = {"Authorization": f"Bearer {api_key}"}
         filename = os.path.basename(video_path)
         with open(video_path, "rb") as fh:
             resp = requests.post(
                 BUFFER_MEDIA,
-                headers=headers,
+                headers={"Authorization": f"Bearer {api_key}"},
                 files={"file": (filename, fh, "video/mp4")},
                 timeout=UPLOAD_TIMEOUT,
             )
         resp.raise_for_status()
-        body = resp.json()
+        body     = resp.json()
         media_id = body.get("id") or body.get("mediaId")
         logger.info(f"[buffer] Media uploaded: {filename} → id={media_id}")
         return media_id

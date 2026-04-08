@@ -8,13 +8,16 @@ Endpoints:
   POST   /buffer/publish          — upload clip + create posts on selected channels
   GET    /buffer/posts            — fetch recent posts from Buffer
   GET    /buffer/history          — publish history from local DB
+  GET    /buffer/test             — debug: raw API response for get_channels
 """
 
+import json
 import os
+import requests as _requests
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from utils import logger
-from buffer_client import get_channels, create_post, get_posts
+from buffer_client import BUFFER_API_URL, get_channels, create_post, get_posts
 from publisher_db import (
     save_buffer_key,
     get_buffer_key,
@@ -179,3 +182,49 @@ def history():
     """Return local publish history (clips sent to Buffer from this app)."""
     rows = get_publish_history(_user_id())
     return jsonify({"history": rows})
+
+
+# ── Debug test ─────────────────────────────────────────────────────────────────
+
+@buffer_bp.route("/test", methods=["GET"])
+@login_required
+def test_api():
+    """Debug endpoint — make raw API call and return the full response body.
+
+    Query params:
+      api_key  (optional) — falls back to stored key
+    """
+    api_key = (request.args.get("api_key") or "").strip() or get_buffer_key(_user_id()) or ""
+    if not api_key:
+        return jsonify({"error": "No api_key provided and none stored."}), 400
+
+    query = """
+    query GetOrganizations {
+      account {
+        organizations {
+          id
+          name
+          channels {
+            id
+            name
+            service
+          }
+        }
+      }
+    }
+    """
+    payload = json.dumps({"query": query})
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    try:
+        resp = _requests.post(BUFFER_API_URL, headers=headers, data=payload, timeout=30)
+        return jsonify({
+            "status_code": resp.status_code,
+            "raw":         resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text,
+            "parsed_channels": get_channels(api_key) if resp.ok else None,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502

@@ -1,7 +1,7 @@
 """buffer_client.py — Buffer GraphQL API client (pure Python / requests).
 
 Buffer API:
-  GraphQL endpoint : https://api.buffer.com/graphql
+  GraphQL endpoint : https://api.buffer.com
   Media upload     : https://api.buffer.com/media  (multipart)
   Auth             : Authorization: Bearer {api_key}
 """
@@ -10,9 +10,9 @@ import os
 import requests
 from utils import logger
 
-BUFFER_GQL  = "https://api.buffer.com/graphql"
-BUFFER_MEDIA = "https://api.buffer.com/media"
-TIMEOUT_SEC  = 30
+BUFFER_API_URL = "https://api.buffer.com"
+BUFFER_MEDIA   = "https://api.buffer.com/media"
+TIMEOUT_SEC    = 30
 UPLOAD_TIMEOUT = 120
 
 
@@ -26,14 +26,14 @@ def _gql(api_key: str, query: str, variables: dict | None = None) -> dict:
         ValueError          — GraphQL ``errors`` field present
     """
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
     }
     payload: dict = {"query": query}
     if variables:
         payload["variables"] = variables
 
-    resp = requests.post(BUFFER_GQL, json=payload, headers=headers, timeout=TIMEOUT_SEC)
+    resp = requests.post(BUFFER_API_URL, json=payload, headers=headers, timeout=TIMEOUT_SEC)
     resp.raise_for_status()
     body = resp.json()
     if "errors" in body:

@@ -37,9 +37,24 @@ def init_db() -> None:
                 username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
                 email         TEXT    UNIQUE,
                 password_hash TEXT    NOT NULL,
+                is_admin      INTEGER NOT NULL DEFAULT 0,
                 created_at    TEXT    NOT NULL
             )
         """)
+        # Safe migration: add is_admin if upgrading from an older DB
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
+        # Bootstrap: if the column exists but no admin exists yet, make the oldest user admin
+        try:
+            no_admin = c.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0] == 0
+            has_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0
+            if no_admin and has_users:
+                first_id = c.execute("SELECT id FROM users ORDER BY id ASC LIMIT 1").fetchone()[0]
+                c.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_id,))
+        except Exception:
+            pass
         c.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
 
         # ── Legacy queue (kept for schema compatibility) ────────────────────────
@@ -123,6 +138,46 @@ def get_user_by_username(username: str) -> dict | None:
 def get_user_count() -> int:
     with _conn() as c:
         return c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def set_admin(user_id: int, admin: bool) -> None:
+    """Grant or revoke admin status for a user."""
+    with _conn() as c:
+        c.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if admin else 0, user_id))
+        c.commit()
+
+
+def delete_user(user_id: int) -> bool:
+    """Delete a user account. Returns True if a row was deleted."""
+    with _conn() as c:
+        cur = c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        c.commit()
+    return cur.rowcount > 0
+
+
+def get_all_users() -> list[dict]:
+    """Return all users ordered by creation date, newest first."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, username, email, is_admin, created_at FROM users ORDER BY created_at ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_publish_history(limit: int = 50) -> list[dict]:
+    """Return the most recent publish-log entries across all users."""
+    with _conn() as c:
+        rows = c.execute(
+            """
+            SELECT pl.*, u.username
+            FROM publish_log pl
+            LEFT JOIN users u ON u.id = CAST(pl.user_id AS INTEGER)
+            ORDER BY pl.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Buffer key ─────────────────────────────────────────────────────────────────

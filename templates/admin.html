@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin — ClipGen</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0d0d0f;
+    --surface: #18181b;
+    --surface2: #222226;
+    --border:  #2e2e35;
+    --accent:  #7c3aed;
+    --accent2: #9b7cff;
+    --text:    #f4f4f5;
+    --muted:   #71717a;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error:   #ef4444;
+    --radius:  12px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0 0 64px;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar-brand .logo {
+    font-size: 1.15rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-decoration: none;
+  }
+  .admin-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(124,58,237,0.18);
+    color: var(--accent2);
+    border: 1px solid rgba(124,58,237,0.35);
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .btn-link {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .btn-link:hover { color: var(--text); border-color: var(--accent); }
+  .btn-link.danger:hover { color: var(--error); border-color: var(--error); }
+
+  /* ── Page body ── */
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 36px 24px 0;
+  }
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+  }
+  .section { margin-bottom: 48px; }
+
+  /* ── Stat cards ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 48px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+  }
+  .stat-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Tables ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  thead {
+    background: var(--surface2);
+  }
+  th {
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.025); }
+
+  /* user name cell */
+  .u-name {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .u-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent2);
+    flex-shrink: 0;
+  }
+  .badge-admin {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(124,58,237,0.18);
+    color: var(--accent2);
+    border: 1px solid rgba(124,58,237,0.3);
+    white-space: nowrap;
+  }
+  .badge-you {
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(34,197,94,0.12);
+    color: var(--success);
+    border: 1px solid rgba(34,197,94,0.25);
+  }
+
+  /* status badges */
+  .st-queued { color: var(--warning); }
+  .st-done   { color: var(--success); }
+  .st-failed { color: var(--error); }
+
+  /* action buttons in table */
+  .actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .btn-sm {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .btn-sm:hover { color: var(--text); border-color: var(--accent); }
+  .btn-sm.danger:hover { color: var(--error); border-color: var(--error); }
+  .btn-sm:disabled { opacity: 0.4; cursor: default; }
+
+  /* feedback toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.875rem;
+    z-index: 999;
+    display: none;
+    max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error   { border-color: var(--error);   color: var(--error); }
+
+  .muted { color: var(--muted); }
+  .empty-row td { text-align: center; color: var(--muted); padding: 28px; }
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ──────────────────────────────────────────────────────────────── -->
+<nav class="topbar">
+  <div class="topbar-brand">
+    <a class="logo" href="/">ClipGen</a>
+    <span class="admin-badge">Admin</span>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn-link" href="/">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      Dashboard
+    </a>
+    <a class="btn-link danger" href="/logout">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      Sign out
+    </a>
+  </div>
+</nav>
+
+<!-- ── Page ─────────────────────────────────────────────────────────────────── -->
+<div class="page">
+  <h2>Admin Dashboard</h2>
+
+  <!-- ── Stat cards ── -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Total Users</div>
+      <div class="stat-value">{{ total_users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Clips</div>
+      <div class="stat-value">{{ total_clips }}</div>
+      <div class="stat-sub">across all accounts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Clip Storage</div>
+      <div class="stat-value">{{ storage_mb }}<span style="font-size:1rem;font-weight:500;color:var(--muted)"> MB</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Buffer Publishes</div>
+      <div class="stat-value">{{ total_publishes }}</div>
+      <div class="stat-sub">in publish log</div>
+    </div>
+  </div>
+
+  <!-- ── Users ── -->
+  <div class="section">
+    <h3>Users</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Clips</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          {% for u in users %}
+          <tr id="user-row-{{ u.id }}">
+            <td class="muted">{{ u.id }}</td>
+            <td>
+              <div class="u-name">
+                <div class="u-avatar">{{ u.username[0].upper() }}</div>
+                {{ u.username }}
+                {% if u.is_admin %}<span class="badge-admin">Admin</span>{% endif %}
+                {% if u.id | string == current_user_id %}<span class="badge-you">you</span>{% endif %}
+              </div>
+            </td>
+            <td class="muted">{{ u.email or '—' }}</td>
+            <td>{{ u.clip_count }}</td>
+            <td class="muted" style="white-space:nowrap;font-size:0.8rem">
+              {{ u.created_at[:10] if u.created_at else '—' }}
+            </td>
+            <td>
+              <div class="actions">
+                {% if u.id | string != current_user_id %}
+                  {% if u.is_admin %}
+                  <button class="btn-sm" onclick="demote({{ u.id }})">Remove Admin</button>
+                  {% else %}
+                  <button class="btn-sm" onclick="promote({{ u.id }})">Make Admin</button>
+                  {% endif %}
+                  <button class="btn-sm danger" onclick="deleteUser({{ u.id }}, '{{ u.username }}')">Delete</button>
+                {% else %}
+                  <span class="muted" style="font-size:0.8rem">—</span>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="6">No users yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Recent publish activity ── -->
+  <div class="section">
+    <h3>Recent Publish Activity</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Clip</th>
+            <th>Channel</th>
+            <th>Status</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in history %}
+          <tr>
+            <td>{{ r.username or r.user_id }}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                title="{{ r.clip }}">{{ r.clip }}</td>
+            <td class="muted" style="font-size:0.8rem">{{ r.channel_id }}</td>
+            <td class="
+              {%- if r.status == 'queued' %} st-queued
+              {%- elif r.status == 'failed' %} st-failed
+              {%- else %} st-done{%- endif %}">
+              {{ r.status }}
+            </td>
+            <td class="muted" style="white-space:nowrap;font-size:0.8rem">
+              {{ r.created_at[:16].replace('T',' ') if r.created_at else '—' }}
+            </td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="5">No publish activity yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = type;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3500);
+  }
+
+  async function promote(uid) {
+    const res  = await fetch(`/admin/users/${uid}/promote`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) { showToast('User promoted to admin.'); location.reload(); }
+    else showToast(data.error || 'Error', 'error');
+  }
+
+  async function demote(uid) {
+    const res  = await fetch(`/admin/users/${uid}/demote`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) { showToast('Admin status removed.'); location.reload(); }
+    else showToast(data.error || 'Error', 'error');
+  }
+
+  async function deleteUser(uid, username) {
+    if (!confirm(`Delete user "${username}"? This will also remove all their clips. This cannot be undone.`)) return;
+    const res  = await fetch(`/admin/users/${uid}/delete`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById(`user-row-${uid}`)?.remove();
+      showToast(`User "${username}" deleted.`);
+    } else {
+      showToast(data.error || 'Error deleting user.', 'error');
+    }
+  }
+</script>
+</body>
+</html>

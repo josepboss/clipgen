@@ -1,9 +1,12 @@
 import os
-import uuid
+import shutil
 import sqlite3
 import threading
+import uuid
+from functools import wraps
+
 from flask import (
-    Flask, jsonify, request, render_template,
+    Flask, abort, jsonify, request, render_template,
     send_from_directory, redirect, url_for, flash,
 )
 from flask_login import (
@@ -11,6 +14,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+
 from utils import validate_youtube_url, logger
 from processor import run_pipeline
 from config_manager import load_config, save_config, is_configured, mask_api_key
@@ -18,8 +22,13 @@ from postiz_client import schedule_post
 from publisher_db import (
     init_db,
     create_user,
+    get_user_by_id,
     get_user_by_username,
     get_user_count,
+    set_admin,
+    delete_user,
+    get_all_users,
+    get_all_publish_history,
 )
 from auth import login_manager, User
 from buffer_routes import buffer_bp
@@ -50,10 +59,43 @@ STEPS = [
 ]
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
 def _user_output_dir(user_id: str) -> str:
     d = os.path.join(OUTPUT_DIR, user_id)
     os.makedirs(d, exist_ok=True)
     return d
+
+
+def _clip_count(user_id: str) -> int:
+    d = os.path.join(OUTPUT_DIR, str(user_id))
+    if not os.path.isdir(d):
+        return 0
+    return sum(1 for f in os.listdir(d) if f.endswith(".mp4"))
+
+
+def _dir_size_mb(path: str) -> float:
+    total = 0
+    if os.path.isdir(path):
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                try:
+                    total += os.path.getsize(os.path.join(dirpath, f))
+                except OSError:
+                    pass
+    return round(total / 1_048_576, 1)
+
+
+def admin_required(f):
+    """Decorator: requires login + admin status. Returns 403 otherwise."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login", next=request.path))
+        if not current_user.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
 
 
 def _set_status(job_id: str, step: str, detail: str = "") -> None:
@@ -111,10 +153,17 @@ def register():
             flash("Passwords do not match.", "error")
         else:
             try:
-                row = create_user(username, email, generate_password_hash(password))
-                user = User(row["id"], row["username"], row["email"])
+                # First user to register automatically becomes admin
+                is_first = get_user_count() == 0
+                row  = create_user(username, email, generate_password_hash(password))
+                if is_first:
+                    set_admin(row["id"], True)
+                    row = get_user_by_id(row["id"])  # refresh row
+                user = User(row["id"], row["username"], row["email"], row.get("is_admin", 0))
                 login_user(user, remember=True)
-                logger.info(f"[auth] New user registered: {username!r} (id={row['id']})")
+                logger.info(
+                    f"[auth] New user registered: {username!r} (id={row['id']}, admin={is_first})"
+                )
                 return redirect(url_for("index"))
             except sqlite3.IntegrityError:
                 flash("Username or email already taken — please choose another.", "error")
@@ -133,7 +182,7 @@ def login():
 
         row = get_user_by_username(username)
         if row and check_password_hash(row["password_hash"], password):
-            user = User(row["id"], row["username"], row["email"])
+            user = User(row["id"], row["username"], row["email"], row.get("is_admin", 0))
             login_user(user, remember=True)
             logger.info(f"[auth] Login: {username!r} (id={row['id']})")
             next_url = request.args.get("next") or url_for("index")
@@ -156,7 +205,72 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html", username=current_user.username)
+    return render_template(
+        "index.html",
+        username=current_user.username,
+        is_admin=current_user.is_admin,
+    )
+
+
+# ── Admin dashboard ────────────────────────────────────────────────────────────
+
+@app.route("/admin")
+@admin_required
+def admin():
+    users   = get_all_users()
+    history = get_all_publish_history(50)
+
+    # Augment users with clip counts
+    for u in users:
+        u["clip_count"] = _clip_count(str(u["id"]))
+
+    # System stats
+    total_clips   = sum(u["clip_count"] for u in users)
+    storage_mb    = _dir_size_mb(OUTPUT_DIR)
+    total_publishes = len(history)
+
+    return render_template(
+        "admin.html",
+        users=users,
+        history=history,
+        total_users=len(users),
+        total_clips=total_clips,
+        storage_mb=storage_mb,
+        total_publishes=total_publishes,
+        current_user_id=current_user.id,
+    )
+
+
+@app.route("/admin/users/<int:uid>/promote", methods=["POST"])
+@admin_required
+def admin_promote(uid: int):
+    set_admin(uid, True)
+    logger.info(f"[admin] {current_user.username!r} promoted user id={uid}")
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/users/<int:uid>/demote", methods=["POST"])
+@admin_required
+def admin_demote(uid: int):
+    if str(uid) == current_user.id:
+        return jsonify({"error": "You cannot remove your own admin status."}), 400
+    set_admin(uid, False)
+    logger.info(f"[admin] {current_user.username!r} demoted user id={uid}")
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/users/<int:uid>/delete", methods=["DELETE"])
+@admin_required
+def admin_delete_user(uid: int):
+    if str(uid) == current_user.id:
+        return jsonify({"error": "You cannot delete your own account here."}), 400
+    # Remove clip directory
+    clip_dir = os.path.join(OUTPUT_DIR, str(uid))
+    if os.path.isdir(clip_dir):
+        shutil.rmtree(clip_dir, ignore_errors=True)
+    deleted = delete_user(uid)
+    logger.info(f"[admin] {current_user.username!r} deleted user id={uid}")
+    return jsonify({"ok": deleted})
 
 
 # ── Clip generation ────────────────────────────────────────────────────────────
@@ -295,6 +409,13 @@ def set_config():
     save_config(cfg)
 
     return jsonify({"success": True, "configured": is_configured()}), 200
+
+
+# ── 403 handler ────────────────────────────────────────────────────────────────
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template("403.html"), 403
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
